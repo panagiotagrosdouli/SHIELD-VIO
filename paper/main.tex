@@ -1,0 +1,30 @@
+\documentclass[conference]{IEEEtran}
+
+\title{Self-Healing Visual-Inertial Odometry for Robust UAV Navigation}
+
+\author{Panagiota Grosdouli}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Visual-inertial odometry systems are central to UAV autonomy, but their performance can degrade under adverse visual conditions such as motion blur, low illumination, texture scarcity, and frame dropout. This work studies whether a VIO system can estimate its own health online, predict imminent tracking degradation, and trigger adaptive recovery strategies before catastrophic failure.
+\end{abstract}
+
+\section{Introduction}
+
+Robust state estimation remains a key challenge for autonomous aerial robots operating in visually degraded environments. Classical VIO systems often detect failure only after tracking has already degraded. This paper explores a self-healing VIO architecture that monitors health signals and adapts its sensing strategy proactively.
+
+\section{Method}
+
+The proposed system combines a baseline visual-inertial backend with an online health monitor, failure predictor, and recovery manager.
+
+\section{Experiments}
+
+Experiments will evaluate clean and degraded EuRoC MAV sequences using ATE, RPE, tracking failures, recovery events, and runtime overhead.
+
+\section{Conclusion}
+
+This work aims to establish a reproducible benchmark and algorithmic framework for self-healing VIO under degraded visual conditions.
+
+\end{document}
