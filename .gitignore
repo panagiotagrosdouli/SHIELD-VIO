@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Generated outputs and local datasets
+results/
+data/
+datasets/
+*.bag
+*.db3
+*.zip
+*.tar
+*.tar.gz
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Paper build artifacts
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.pdf
