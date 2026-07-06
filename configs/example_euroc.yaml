@@ -1,0 +1,18 @@
+experiment_name: euroc_mh01_self_healing_vio_baseline
+
+dataset:
+  name: EuRoC MAV
+  sequence: MH_01_easy
+  root: /path/to/EuRoC/MH_01_easy
+  ground_truth: /path/to/EuRoC/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv
+
+baseline:
+  system: ORB-SLAM3
+  mode: stereo_inertial
+
+health_monitor:
+  warning_threshold: 0.55
+  critical_threshold: 0.30
+
+research:
+  hypothesis: Self-healing VIO can detect degradation before tracking failure and reduce trajectory error under adverse visual conditions.
