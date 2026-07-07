@@ -1,3 +1,8 @@
-"""Self-healing visual-inertial odometry research package."""
+"""SHIELD-VIO prototype package.
 
-__version__ = '0.1.0'
+This package contains backend-agnostic components for degradation-aware
+visual-inertial odometry: detection, diagnosis, health fusion, recovery policy,
+and ROS2 integration skeletons.
+"""
+
+__version__ = "0.1.0"
