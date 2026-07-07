@@ -1,0 +1,48 @@
+detectors:
+  image_entropy:
+    min_entropy: 2.0
+    max_entropy: 7.5
+    weight: 1.0
+  motion_blur:
+    low_variance: 20.0
+    high_variance: 250.0
+    weight: 1.0
+  feature_collapse:
+    min_features: 40
+    target_features: 180
+    weight: 1.0
+  imu_consistency:
+    nominal_residual: 0.05
+    max_residual: 1.5
+    weight: 1.0
+  reprojection_error:
+    nominal_px: 1.0
+    max_px: 8.0
+    weight: 1.0
+
+diagnosis:
+  priors:
+    nominal: 0.45
+    camera: 0.12
+    environment: 0.13
+    motion: 0.12
+    sensor: 0.10
+    algorithm: 0.08
+
+navigation_health_index:
+  risk_penalty: 0.0
+  output_range: [0, 100]
+
+recovery_policy:
+  critical_nhi: 25.0
+  degraded_nhi: 55.0
+  posterior_threshold: 0.35
+  safety_fallback_action: request_hover
+
+ros2:
+  planned_integration: true
+  image_topic: /camera/image_raw
+  imu_topic: /imu/data
+  health_topic: /shield_vio/health
+  diagnosis_topic: /shield_vio/diagnosis
+  recovery_topic: /shield_vio/recovery_action
