@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping
 
+from self_healing_vio.health import VioHealthEstimate
+
 
 class RecoveryAction(str, Enum):
     """Supported prototype recovery actions."""
@@ -21,6 +23,26 @@ class RecoveryAction(str, Enum):
     RELOCALIZE = "relocalize"
     FALLBACK_INERTIAL = "fallback_inertial"
     EMERGENCY_LAND = "emergency_land"
+
+
+@dataclass(frozen=True)
+class RecoveryDecision:
+    """Legacy controller recovery decision."""
+
+    action: str
+    priority: int
+    reason: str = ""
+
+
+class RecoveryPolicy:
+    """Compatibility policy used by the original controller tests."""
+
+    def decide(self, health: VioHealthEstimate) -> RecoveryDecision:
+        if health.level == "healthy":
+            return RecoveryDecision("continue_nominal_tracking", 1, "VIO health is nominal")
+        if health.level == "warning":
+            return RecoveryDecision("increase_inertial_weight", 2, "VIO health is degraded")
+        return RecoveryDecision("trigger_relocalization", 3, "VIO health is critical")
 
 
 @dataclass
