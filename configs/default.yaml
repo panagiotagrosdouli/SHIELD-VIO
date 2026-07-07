@@ -10,15 +10,15 @@ detectors:
   feature_collapse:
     min_features: 40
     target_features: 180
-    weight: 1.0
+    weight: 1.2
   imu_consistency:
     nominal_residual: 0.05
     max_residual: 1.5
-    weight: 1.0
+    weight: 1.2
   reprojection_error:
     nominal_px: 1.0
     max_px: 8.0
-    weight: 1.0
+    weight: 1.3
 
 diagnosis:
   priors:
@@ -38,11 +38,11 @@ recovery_policy:
   degraded_nhi: 55.0
   posterior_threshold: 0.35
   safety_fallback_action: request_hover
+  safety_gate:
+    allow_emergency_land: false
+    require_hover_before_relocalization: true
 
-ros2:
-  planned_integration: true
-  image_topic: /camera/image_raw
-  imu_topic: /imu/data
+ros2_planned:
   health_topic: /shield_vio/health
   diagnosis_topic: /shield_vio/diagnosis
   recovery_topic: /shield_vio/recovery_action
