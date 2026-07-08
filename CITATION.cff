@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+title: "SHIELD-VIO: Self-Healing Intelligent Estimation and Localization for Degradation-aware Visual-Inertial Odometry"
+message: "If you use this research prototype, please cite it using this metadata."
+type: software
+authors:
+  - family-names: Grosdouli
+    given-names: Panagiota
+repository-code: "https://github.com/panagiotagrosdouli/SHIELD-VIO"
+year: 2026
+license: MIT
+keywords:
+  - visual-inertial odometry
+  - SLAM
+  - robust autonomy
+  - UAV navigation
+  - uncertainty estimation
