@@ -10,6 +10,22 @@
 
 ---
 
+## PhD-Level Research Positioning
+
+SHIELD-VIO is the flagship robotics repository in my research portfolio. It frames localization robustness as a **closed-loop autonomy problem**: a robot should not only estimate its pose, but also monitor the health of that estimate, reason about degradation causes, and select recovery actions before localization failure becomes catastrophic.
+
+The project is intended to support future graduate research in:
+
+- robust visual-inertial odometry,
+- self-healing robotic perception,
+- uncertainty-aware autonomy,
+- UAV localization under degradation,
+- safety-aware field robotics.
+
+The current repository is a Python research prototype and documentation scaffold. It does **not** claim a complete production VIO system; instead, it establishes the monitoring, diagnosis, and recovery layer that can later be integrated with systems such as OpenVINS, VINS-Fusion, ORB-SLAM3, or Kimera-VIO.
+
+---
+
 ## Motivation
 
 Visual-Inertial Odometry (VIO) is a foundation of GPS-denied UAV autonomy. However, practical VIO systems can degrade silently under motion blur, low texture, illumination changes, sensor inconsistency, aggressive motion, and estimator divergence. SHIELD-VIO studies VIO robustness as a closed-loop autonomy problem: monitor degradation, diagnose likely cause, and select a recovery action.
@@ -107,6 +123,19 @@ Expected demo output includes detector scores, diagnosis probabilities, selected
 ## Navigation Health Index
 
 The Navigation Health Index is a scalar in `[0, 100]` computed from normalized health scores and optional risk penalties. It is intended as an interpretable reliability signal for planners, safety monitors, and human operators.
+
+---
+
+## Relationship to Other Research Repositories
+
+SHIELD-VIO is part of a broader research direction on robust autonomy under uncertainty:
+
+- [`Adaptive Multi-Modal SLAM`](https://github.com/panagiotagrosdouli/Adaptive-Multi-Modal-SLAM-with-Uncertainty-Aware-Sensor-Fusion): adaptive sensor fusion and SLAM robustness under perceptual degradation.
+- [`DynNav`](https://github.com/panagiotagrosdouli/DynNav-Dynamic-Navigation-Rerouting-in-Unknown-Environments): risk-sensitive navigation and replanning under map uncertainty.
+- [`Uncertainty-Aware Navigation`](https://github.com/panagiotagrosdouli/uncertainty-aware-navigation): controlled baseline experiments for risk-aware mobile robot planning.
+- [`SafeCrossAI`](https://github.com/panagiotagrosdouli/SafeCrossAI): safety-aware trajectory prediction and intelligent intersection research.
+
+Together, these projects support a coherent PhD research narrative: **robots should estimate uncertainty, detect degradation, plan around risk, and recover before safety is compromised.**
 
 ---
 
