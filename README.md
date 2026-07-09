@@ -3,6 +3,7 @@
 [![CI](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/workflows/ci.yml/badge.svg)](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Status](https://img.shields.io/badge/status-research%20prototype-orange)
+![Demo](https://img.shields.io/badge/results-Synthetic%20Demo-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **SHIELD-VIO studies how a Visual-Inertial Odometry system can detect unreliable state estimates and shield downstream navigation from unsafe perception failures.**
@@ -11,11 +12,51 @@
 
 This repository is intentionally conservative: it does **not** claim state-of-the-art performance, does **not** invent benchmark numbers, and separates implemented code, prototypes, and planned work.
 
-<p align="center"><img src="assets/demo.gif" alt="SHIELD-VIO generated demo" width="760" /></p>
+<p align="center"><img src="assets/gifs/demo.gif" alt="SHIELD-VIO Synthetic Demo" width="760" /></p>
+
+## Synthetic Demo first
+
+The most important executable path is now:
+
+```bash
+python scripts/run_all.py
+```
+
+It runs the deterministic **Synthetic Demo** end to end:
+
+1. synthetic trajectory and IMU/visual measurements,
+2. EKF-like propagation and visual updates,
+3. uncertainty, NEES/NIS, visual-quality, and risk scoring,
+4. safety shield decisions,
+5. metrics,
+6. publication-style figures,
+7. `demo.gif`, and
+8. `demo.mp4` when `ffmpeg` is available.
+
+Generated outputs are written to:
+
+```text
+results/synthetic_demo/ground_truth.csv
+results/synthetic_demo/estimated_trajectory.csv
+results/synthetic_demo/uncertainty.csv
+results/synthetic_demo/visual_quality.csv
+results/synthetic_demo/risk_score.csv
+results/synthetic_demo/shield_events.csv
+results/metrics/summary.json
+results/metrics/metrics.csv
+results/figures/*.png
+assets/figures/*.png
+assets/gifs/demo.gif
+assets/videos/demo.mp4
+results/videos/shield_vio_demo.gif
+results/videos/shield_vio_demo.mp4
+```
+
+All generated numbers and videos are labeled **Synthetic Demo**. They are not real-world benchmark results.
 
 ## Motivation
 
-Accurate pose estimation alone is not enough for safe autonomy. A downstream planner can behave unsafely when it receives a confident-looking but degraded VIO pose. SHIELD-VIO adds introspection: visual tracking quality, IMU consistency, covariance health, innovation consistency, normalized risk, and a safety shield that can request low-confidence mode, slow-down, hover/halt, or relocalization.
+Accurate pose estimation alone is not enough for safe autonomy. A downstream planner can behave unsafely when it receives a confident-looking but degraded VIO pose. SHIELD-VIO adds introspection: visual tracking quality, IMU consistency, covariance health, innovation consistency, normalized risk, and a safety shield that can request low-confidence mode, slow-down, halt, or relocalization.
 
 ## Scientific formulation
 
@@ -31,108 +72,80 @@ with error state
 \delta x = [\delta p, \delta v, \delta\theta, \delta b_a, \delta b_g]^T \in \mathbb{R}^{15}.
 ```
 
-The scaffold propagates state and covariance with IMU measurements, applies linear visual measurement updates, computes `NEES`, `NIS`, covariance trace/log-det/conditioning, visual quality, risk, and shield decisions. See [`docs/MATHEMATICAL_FORMULATION.md`](docs/MATHEMATICAL_FORMULATION.md).
+The current executable demo uses a simplified 3D translational EKF-like synthetic estimator and clearly marks full production VIO as planned. It propagates state and covariance with noisy IMU acceleration, applies linear visual position updates, computes covariance trace/log-det, NEES, NIS, visual quality, normalized risk, and shield decisions. See [`docs/MATHEMATICAL_FORMULATION.md`](docs/MATHEMATICAL_FORMULATION.md) and [`docs/SYNTHETIC_DEMO_AUDIT.md`](docs/SYNTHETIC_DEMO_AUDIT.md).
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  CAM[Camera] --> FE[Visual front-end]
-  IMU[IMU] --> PROP[IMU propagation]
+  CAM[Camera degradation proxy] --> FE[Visual quality]
+  IMU[Noisy IMU] --> PROP[Propagation]
   FE --> UPD[Visual update]
-  PROP --> ESKF[Error-state EKF]
-  UPD --> ESKF
-  ESKF --> UNC[Uncertainty monitor]
-  FE --> VQ[Visual quality]
-  IMU --> IQ[IMU consistency]
+  PROP --> EKF[Synthetic EKF-like estimator]
+  UPD --> EKF
+  EKF --> UNC[Uncertainty monitor]
   UNC --> RISK[Risk score]
-  VQ --> RISK
-  IQ --> RISK
+  FE --> RISK
   RISK --> SHIELD[Safety shield]
-  SHIELD --> NAV[Planner / controller]
+  SHIELD --> NAV[Downstream navigation guard]
 ```
 
-## Safety shield
+## Commands
+
+```bash
+python -m pip install -e '.[dev]'
+python scripts/run_synthetic_demo.py --out results/synthetic_demo --seed 7
+python scripts/evaluate_experiment.py --results results/synthetic_demo
+python scripts/generate_figures.py --results results/synthetic_demo
+python scripts/make_demo_gif.py --results results/synthetic_demo
+python scripts/run_all.py
+pytest -q
+```
+
+## Docker quick start
+
+```bash
+docker build -t shield-vio .
+docker run --rm -v "$PWD/results:/app/results" shield-vio python scripts/run_all.py
+```
+
+## Safety shield states
 
 ```mermaid
 flowchart TD
   R[Risk + visual quality + tracking status] --> A{Tracking failed?}
-  A -- yes --> REL[request relocalization / halt]
+  A -- yes --> REL[RELOCALIZE_REQUESTED]
   A -- no --> B{Risk critical?}
-  B -- yes --> HALT[hover or halt]
-  B -- no --> C{Risk warning?}
-  C -- yes --> SLOW[slow down]
-  C -- no --> D{Near threshold?}
-  D -- yes --> LOW[low-confidence mode]
-  D -- no --> NOM[nominal]
+  B -- yes --> HALT[HALT]
+  B -- no --> C{Risk high?}
+  C -- yes --> SLOW[SLOW_DOWN]
+  C -- no --> D{Risk warning or poor quality?}
+  D -- yes --> WARN[WARNING]
+  D -- no --> NOM[NORMAL]
 ```
-
-## Installation
-
-```bash
-git clone https://github.com/panagiotagrosdouli/SHIELD-VIO.git
-cd SHIELD-VIO
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-pytest -q
-```
-
-## Quick start
-
-```bash
-python scripts/run_synthetic_experiment.py --scenario nominal --seed 7 --out results/synthetic/nominal
-python scripts/run_synthetic_experiment.py --scenario motion_blur --seed 11 --out results/synthetic/motion_blur
-python scripts/make_demo_gif.py
-```
-
-Synthetic outputs are demos and sanity checks, **not** benchmark evidence.
-
-## Dataset examples
-
-Real dataset integration is documented/scaffolded but not benchmarked yet.
-
-```bash
-# EuRoC placeholder run until the real loader is implemented
-python scripts/run_synthetic_experiment.py --scenario nominal --out results/euroc_placeholder
-
-# TUM-VI placeholder run until the real loader is implemented
-python scripts/run_synthetic_experiment.py --scenario aggressive_motion --out results/tumvi_placeholder
-
-# ROS2 planned/prototype
-ros2 launch shield_vio_ros2 shield_monitor.launch.py
-```
-
-Datasets are not redistributed. See [`docs/DATASETS.md`](docs/DATASETS.md).
 
 ## Implemented / Prototype / Planned
 
 | Area | Status | Evidence |
 |---|---:|---|
-| Quaternion utilities and PSD covariance checks | Implemented | `shield_vio/core/math.py`, tests |
-| Error-state EKF propagation/update scaffold | Implemented | `shield_vio/estimation/eskf.py`, tests |
-| IMU noise model and consistency checks | Implemented | `shield_vio/imu/model.py` |
-| Visual quality score | Implemented | `shield_vio/frontend/features.py` |
-| Covariance, NEES, NIS, risk normalization | Implemented | `shield_vio/uncertainty/metrics.py` |
-| Safety shield fallback policy | Implemented | `shield_vio/safety/shield.py` |
-| ATE/RPE/failure-detection metrics | Implemented | `shield_vio/evaluation/metrics.py` |
-| Synthetic degradation experiments | Prototype | `scripts/run_synthetic_experiment.py` |
-| GIF/video export | Prototype | `scripts/make_demo_gif.py` |
-| EuRoC, TUM-VI, KITTI benchmarks | Planned | `docs/DATASETS.md`, `docs/EVALUATION_PROTOCOL.md` |
-| ROS2 node/RViz | Prototype/Planned | `shield_vio/ros2/README.md` |
-| Next.js website | Planned scaffold | `website/README.md` |
+| Deterministic synthetic VIO scenario | Implemented | `shield_vio/simulation/synthetic_vio.py` |
+| Required CSV outputs | Implemented | `results/synthetic_demo/*.csv` generated by code |
+| ATE/RPE synthetic metrics | Implemented | `scripts/evaluate_experiment.py` |
+| Figure generation from code | Implemented | `scripts/generate_figures.py` |
+| GIF and MP4 rendering from code | Implemented | `scripts/make_demo_gif.py` |
+| End-to-end pipeline | Implemented | `scripts/run_all.py` |
+| Regression tests | Implemented | `tests/test_synthetic_demo_pipeline.py` |
+| Full production VIO backend | Planned | Real feature tracking, preintegration, loop closure, datasets |
+| Real EuRoC/TUM-VI/KITTI benchmarks | Planned | Pending reproducible dataset integration |
+| ROS2 closed-loop safety validation | Planned | Pending hardware/simulator integration |
 
 ## Metrics
 
-ATE, RPE, NEES, NIS, covariance trace, log determinant, condition number, failure-detection precision/recall, false alarm rate, time-to-detection, tracking failure rate, shield activation rate, and runtime FPS.
-
-## Baselines
-
-Planned baselines: standard VIO without shield, fixed uncertainty threshold, visual-quality monitor, SHIELD-VIO uncertainty-aware monitor, and oracle degradation label scaffold. Results are **Pending** until run reproducibly.
+The synthetic demo reports ATE RMSE, RPE RMSE, final position error, covariance trace, log determinant, entropy proxy, NEES, NIS, visual quality, risk score, shield activation rate, failure-detection precision/recall against synthetic degradation labels, and shield status counts.
 
 ## Limitations
 
-This is not a production VIO backend. The current estimator is a research scaffold; real EuRoC/TUM-VI/KITTI numbers, hardware validation, ROS2 deployment, and closed-loop navigation experiments are pending.
+This is not a production VIO backend. The executable demo is a deterministic research scaffold for uncertainty monitoring and safety-shield behavior. Real visual features, camera calibration, IMU preintegration, robust outlier rejection, map management, real datasets, hardware validation, and closed-loop navigation experiments remain planned.
 
 ## Citation
 
@@ -141,11 +154,11 @@ This is not a production VIO backend. The current estimator is a research scaffo
   title  = {SHIELD-VIO: Safety-Aware Visual-Inertial Odometry with Uncertainty Monitoring and Failure Shielding},
   author = {Grosdouli, Panagiota},
   year   = {2026},
-  note   = {Research prototype; no state-of-the-art claim},
+  note   = {Research prototype; synthetic demo; no state-of-the-art claim},
   url    = {https://github.com/panagiotagrosdouli/SHIELD-VIO}
 }
 ```
 
 ## Future MSc/PhD extensions
 
-Conformal failure prediction, uncertainty calibration, shield-aware MPC, active perception recovery, ROS2/hardware validation, and time-to-detection evaluation under safety-critical navigation constraints.
+Conformal failure prediction, uncertainty calibration, shield-aware MPC, active perception recovery, robust visual-inertial preintegration, ROS2/hardware validation, and time-to-detection evaluation under safety-critical navigation constraints.
