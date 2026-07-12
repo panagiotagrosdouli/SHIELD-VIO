@@ -10,3 +10,18 @@ jobs:
       - run: python -m pip install -e '.[dev]'
       - run: ruff check shield_vio scripts tests
       - run: pytest -q
+      - name: Generate synthetic README evidence
+        run: |
+          python scripts/run_synthetic_demo.py --out results/synthetic_demo --seed 7
+          python scripts/generate_readme_evidence.py \
+            --results results/synthetic_demo \
+            --output results/readme_evidence
+      - name: Upload reproducible evidence panels
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-vio-readme-evidence
+          path: |
+            results/readme_evidence/*.png
+            results/synthetic_demo/*.csv
+          if-no-files-found: error
+          retention-days: 14
