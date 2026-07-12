@@ -17,6 +17,12 @@
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 </p>
 
+<p align="center">
+  <img src="assets/readme/shield_vio_research_overview.svg" alt="Generated SHIELD-VIO research architecture overview" width="100%" />
+</p>
+
+<p align="center"><em>Generated project overview. Component status and validation boundaries match the repository evidence described below.</em></p>
+
 > **Research question**  
 > How can a visual–inertial estimator recognize that its state estimate is becoming unreliable early enough to protect downstream navigation, trigger recovery, and maintain meaningful confidence under sensor degradation and domain shift?
 
