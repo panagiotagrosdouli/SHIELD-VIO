@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible software, numerical, or experiment-pipeline defect
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Do not include credentials, private data, or sensitive physical-platform safety details in a public issue.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: What is wrong, and which subsystem is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include exact commands, configuration, seed, and input data description.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Include the complete error message or numerical symptom.
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Git revision or release
+      placeholder: commit SHA, branch, or tag
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, operating system, dependency versions, and hardware where relevant.
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence
+    attributes:
+      label: Context
+      options:
+        - Unit or analytical test
+        - Synthetic experiment
+        - Public dataset
+        - Simulation
+        - Hardware or physical platform
+        - Documentation or claim boundary
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I removed private data and credentials.
+          required: true
+        - label: I did not include sensitive security or immediate physical-safety details.
+          required: true
