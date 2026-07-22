@@ -1,198 +1,220 @@
-<div align="center">
-
 # SHIELD-VIO
 
-## Failure-Aware Visual–Inertial Odometry with Runtime Protection
+<p align="center">
+  <strong>Estimator introspection, calibrated failure prediction, and protective navigation for visual–inertial autonomy</strong>
+</p>
 
-A reproducible research framework for detecting visual–inertial degradation before localization failure becomes safety-critical, then applying stateful supervisory responses.
+<p align="center">
+  A reproducible research framework for detecting when visual–inertial state estimation is becoming unreliable,<br/>
+  quantifying that risk, and shielding downstream navigation before localization failure becomes safety critical.
+</p>
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#installation)
-[![Status](https://img.shields.io/badge/Status-Research%20Prototype-orange)](#verified-scope)
-[![Tests](https://img.shields.io/badge/Validation-Unit%20%2B%20Synthetic-blue)](#reproducibility)
+<p align="center">
+  <a href="https://github.com/panagiotagrosdouli/SHIELD-VIO/actions"><img alt="CI" src="https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/workflows/ci.yml/badge.svg" /></a>
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10%2B-blue" />
+  <img alt="Status" src="https://img.shields.io/badge/status-research%20prototype-orange" />
+  <img alt="Validation" src="https://img.shields.io/badge/validation-synthetic%20%2B%20unit%20tests-purple" />
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
+</p>
 
-**English** · [Ελληνικά](README_GR.md)
+<p align="center">
+  <img src="assets/readme/shield_vio_research_overview.svg" alt="SHIELD-VIO research architecture" width="100%" />
+</p>
 
-</div>
+> **Research question**  
+> How can a visual–inertial estimator recognize that its state estimate is becoming unreliable early enough to protect downstream navigation, trigger recovery, and maintain meaningful confidence under sensor degradation and domain shift?
 
-> **Research question:** Can a visual–inertial estimator identify loss of reliability early enough to protect a navigation stack before estimator divergence becomes operationally critical?
+## At a glance
 
-SHIELD-VIO combines visual feature tracking, bias-aware IMU preintegration, error-state filtering, consistency diagnostics, failure prediction, domain-shift monitoring, and a stateful navigation shield. The project is designed as an inspectable experimental platform rather than a black-box autonomy claim.
+| Layer | Current capability | Evidence level |
+|---|---|---|
+| Visual frontend | Shi–Tomasi + pyramidal Lucas–Kanade tracking | Research prototype |
+| Inertial backend | Bias-aware IMU preintegration | Analytical unit validation |
+| Estimation | 15-state error-state EKF | Numerical invariant validation |
+| Failure prediction | Rules, logistic baseline, calibration metrics, conformal bounds | Experimental |
+| Shift awareness | Rolling four-state domain-shift detector | Experimental |
+| Navigation protection | Stateful shield, speed limiting, hold, halt, relocalization request | Closed-loop unit validation |
+| Evaluation | Seeded degradations, failure labels, multi-seed statistics | Synthetic validation |
+| Public datasets | EuRoC, TUM-VI, generic adapters | Pending dataset execution |
+| ROS 2 / hardware | Planned | Validation required |
 
-## Why this project matters
+## Why SHIELD-VIO?
 
-Visual–inertial odometry can degrade abruptly under motion blur, low texture, occlusion, illumination change, inertial bias, vibration, timing mismatch, or distribution shift. A navigation system that reports only a pose estimate may continue operating after its uncertainty model has stopped reflecting reality.
+Trajectory accuracy alone is not enough for safety-oriented autonomy. A robot must also know when its estimate is no longer trustworthy, whether its uncertainty is statistically consistent, whether the sensor stream has shifted away from the calibration domain, and which protective action should follow.
 
-SHIELD-VIO studies a different operating principle:
+SHIELD-VIO treats estimator health as a first-class signal. Visual quality, IMU health, innovations, covariance, consistency diagnostics, failure scores, calibrated probabilities, conformal bounds, domain-shift states, shield actions, and recovery requests remain explicit and auditable.
 
-1. estimate motion;
-2. measure estimator consistency and degradation signals;
-3. predict elevated failure risk;
-4. enter a protected navigation state;
-5. expose the evidence that triggered the transition.
+<p align="center">
+  <img src="assets/readme/degradation_failure_timeline.svg" alt="Degradation to failure timeline" width="100%" />
+</p>
 
-The goal is not to claim formally verified safety. The goal is to make failure awareness measurable, reproducible, and testable.
-
-## System overview
+## Research architecture
 
 ```mermaid
 flowchart LR
-    C[Camera frames] --> F[Feature detection and tracking]
-    I[IMU samples] --> P[Bias-aware preintegration]
-    F --> E[15-state error-state EKF]
-    P --> E
-    E --> D[Innovation and consistency diagnostics]
-    D --> R[Rule-based / logistic failure prediction]
-    R --> M[Domain-shift and calibration checks]
-    M --> S[Stateful navigation shield]
-    S --> A[Continue / degrade / protect / recover]
+    CAM[Camera frames] --> TRACK[OpenCV feature frontend]
+    IMU[IMU stream] --> PREINT[Bias-aware preintegration]
+    TRACK --> ESKF[15-state error-state EKF]
+    PREINT --> ESKF
+    ESKF --> CONS[Consistency diagnostics]
+    TRACK --> VHEALTH[Visual health]
+    IMU --> IHEALTH[IMU health]
+    CONS --> DET[Failure detectors]
+    VHEALTH --> DET
+    IHEALTH --> DET
+    DET --> CAL[Calibration / conformal bounds]
+    CONS --> SHIFT[Domain-shift detector]
+    VHEALTH --> SHIFT
+    IHEALTH --> SHIFT
+    CAL --> SHIELD[Stateful navigation shield]
+    SHIFT --> SHIELD
+    ESKF --> SHIELD
+    SHIELD --> NAV[Navigation guard]
+    SHIELD --> REC[Recovery action]
+    NAV --> LOG[Metrics and manifests]
+    REC --> LOG
 ```
 
-## Implemented components
+The feature frontend, preintegration module, and ESKF are research components rather than a production-quality end-to-end VIO replacement.
 
-| Component | Current role |
-|---|---|
-| Shi–Tomasi feature detection | Selects trackable visual features |
-| Lucas–Kanade optical flow | Tracks features between frames |
-| Bias-aware IMU preintegration | Aggregates inertial motion between updates |
-| 15-state error-state EKF | Maintains the navigation error state |
-| NIS and NEES diagnostics | Evaluates innovation and state consistency |
-| Deterministic degradation injection | Produces controlled visual and inertial failures |
-| Rule-based failure detector | Provides an interpretable baseline |
-| Logistic failure detector | Provides a learned probabilistic baseline |
-| Calibration and conformal evaluation | Studies reliability of risk estimates |
-| Stateful navigation shield | Applies supervisory operating-state transitions |
+## Implemented research components
 
-## Failure-awareness pipeline
+### Visual feature tracking
 
-SHIELD-VIO separates estimation from protection so each layer can be evaluated independently.
+- Shi–Tomasi corner detection;
+- pyramidal Lucas–Kanade optical flow;
+- persistent track identifiers;
+- forward–backward rejection;
+- feature replenishment and exclusion masks;
+- track age, survival, outlier ratio, blur, brightness, and feature-count diagnostics.
 
-### 1. State estimation
+<p align="center"><img src="assets/readme/feature_tracking_pipeline.svg" alt="Feature tracking pipeline" width="92%" /></p>
 
-The visual and inertial streams produce a navigation estimate through feature tracking, IMU preintegration, and error-state filtering.
+### IMU preintegration and ESKF
 
-### 2. Consistency monitoring
+- delta position, velocity, and rotation;
+- covariance propagation and bias Jacobians;
+- 15-state error propagation;
+- Joseph-form visual updates;
+- quaternion normalization;
+- covariance symmetry and PSD repair;
+- external-pose reset for recovery studies.
 
-Innovation statistics and state-error diagnostics are used to identify when residual behavior is incompatible with the estimator's uncertainty assumptions.
+<p align="center"><img src="assets/readme/eskf_pipeline.svg" alt="IMU preintegration and ESKF pipeline" width="92%" /></p>
 
-### 3. Failure prediction
+### Failure prediction and shift awareness
 
-Interpretable rules and a logistic model convert diagnostic features into a failure-risk signal. The learned detector is treated as a research baseline, not as proof of safety.
+The repository includes interpretable multi-signal rules, a lightweight logistic detector, Brier score, NLL, ECE, maximum calibration error, split-conformal scalar bounds, and rolling domain-shift states.
 
-### 4. Supervisory protection
+<p align="center"><img src="assets/readme/calibration_shift_map.svg" alt="Calibration and domain-shift map" width="100%" /></p>
+<p align="center"><img src="assets/readme/failure_prediction_pipeline.svg" alt="Failure prediction pipeline" width="92%" /></p>
 
-A stateful shield converts persistent risk into navigation actions. Hysteresis and recovery logic help prevent rapid switching between healthy and degraded states.
+### Closed-loop shielding and recovery
 
-## Quick start
+`NORMAL → WARNING → SLOW_DOWN → HOLD_POSITION → RELOCALIZE_REQUESTED → HALT → EMERGENCY_STOP`
+
+The shield includes hysteresis, minimum dwell behavior, stale-sensor handling, emergency override, speed scaling, and recovery-action selection.
+
+<p align="center"><img src="assets/readme/navigation_shield_state_machine.svg" alt="Navigation shield state machine" width="92%" /></p>
+<p align="center"><img src="assets/readme/recovery_control_loop.svg" alt="Recovery-aware closed loop" width="100%" /></p>
+
+## Executable evidence
+
+The panels below come from a deterministic synthetic CI run and are kept separate from explanatory graphics.
+
+<p align="center"><img src="assets/readme/evidence/trajectory_evidence.svg" alt="Synthetic trajectory evidence" width="48%" /> <img src="assets/readme/evidence/estimator_health_evidence.svg" alt="Synthetic estimator health evidence" width="48%" /></p>
+
+These figures are **synthetic validation only**. They do not imply public-dataset, ROS 2, simulator, hardware, production-VIO, calibrated real-world, or formal-safety validation.
+
+## Installation and reproduction
 
 ```bash
 git clone https://github.com/panagiotagrosdouli/SHIELD-VIO.git
 cd SHIELD-VIO
-
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
-
 python scripts/run_all.py
-pytest -q
 ```
 
-Windows PowerShell activation:
-
-```powershell
-.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-python scripts/run_all.py
-pytest -q
-```
-
-## Reproducibility
-
-The repository is structured around deterministic numerical checks, unit validation, and synthetic multi-seed experiments.
-
-For every reported experiment, preserve at minimum:
-
-- the software revision;
-- random seeds;
-- degradation configuration;
-- detector configuration and thresholds;
-- calibration split and evaluation split;
-- estimator and shield parameters;
-- aggregate results across seeds;
-- generated tables and figures.
-
-Recommended validation commands:
+Static checks and tests:
 
 ```bash
-python scripts/run_all.py
+ruff check shield_vio scripts tests
+black --check .
 pytest -q
 ```
 
-A result should not be described as robust unless it remains stable across multiple seeds and relevant degradation conditions.
+Generate evidence panels:
 
-## Evaluation dimensions
+```bash
+python scripts/run_synthetic_demo.py --out results/synthetic_demo --seed 7
+python scripts/generate_readme_evidence.py \
+  --results results/synthetic_demo \
+  --output assets/readme/evidence
+```
 
-| Category | Example evidence |
-|---|---|
-| Estimation quality | position, velocity, attitude, or trajectory error |
-| Consistency | NIS and NEES behavior |
-| Detection quality | precision, recall, AUROC, calibration, lead time |
-| Protection quality | avoided failure events and shield-state behavior |
-| Recovery behavior | time and conditions required to return to nominal operation |
-| Robustness | performance across visual, inertial, and combined degradations |
-| Generalization | held-out degradation strengths or distributions |
+Run repeated scenarios:
 
-## Verified scope
+```bash
+python scripts/run_scenario_suite.py --num-seeds 20 --output results/scenario_suite
+```
 
-| Area | Status | Evidence boundary |
-|---|---:|---|
-| Visual feature tracking | Implemented | Algorithmic and synthetic validation |
-| IMU preintegration | Implemented | Numerical and unit validation |
-| 15-state error-state EKF | Implemented | Research implementation |
-| NIS / NEES diagnostics | Implemented | Synthetic consistency experiments |
-| Deterministic degradation injection | Implemented | Controlled synthetic scenarios |
-| Rule-based failure detection | Implemented | Interpretable research baseline |
-| Logistic failure detection | Implemented | Prototype learned baseline |
-| Calibration / conformal evaluation | Implemented | Experimental evaluation utilities |
-| Stateful navigation shield | Implemented | Supervisory research logic |
-| Public-dataset benchmark | Incomplete | No comprehensive public benchmark claim |
-| Robust relocalization | Incomplete | Recovery capability remains limited |
-| ROS 2 integration | Incomplete | No deployment-ready ROS 2 stack claim |
-| High-fidelity simulation | Incomplete | Current evidence is mainly synthetic |
-| Hardware validation | Not available | No robot or embedded validation claim |
-| Formal safety verification | Not available | The shield is not a certified safety mechanism |
+Docker:
 
-## Scientific claim boundary
+```bash
+docker build -t shield-vio .
+docker run --rm -v "$(pwd)/results:/app/results" shield-vio python scripts/run_all.py
+```
 
-Current evidence is based mainly on numerical checks, unit validation, and synthetic multi-seed experiments. These results can support claims about implementation behavior under controlled conditions, but they do not establish deployment readiness, real-world robustness, or formal safety.
+## Evaluation protocol
 
-The supervisory shield is research logic. It must not be treated as a standalone safety controller for a physical platform.
+Training, calibration, test, and shifted-test sequences should remain separate. Detector comparisons should use identical seeds and failure definitions. Relevant metrics include precision, recall, F1, AUROC, AUPRC, Brier score, NLL, ECE, warning lead time, conformal coverage, unsafe navigation events, recovery success, runtime, and computational latency.
 
-## Roadmap
+Failure labels must be derived from observable estimator or navigation behavior. Injected degradation must not automatically be treated as estimator failure.
 
-1. Add a public-dataset evaluation pipeline.
-2. Report detection lead time and calibration across multiple degradation families.
-3. Add stronger estimator and detector baselines.
-4. Introduce ablations for each diagnostic feature and shield transition rule.
-5. Implement robust relocalization and recovery experiments.
-6. Add ROS 2 interfaces and simulation integration.
-7. Validate timing, compute, and memory requirements.
-8. Evaluate on recorded and live hardware data.
-9. Study formal runtime-assurance interfaces separately from the research shield.
+## Public-dataset adapters
 
-## Suggested reporting checklist
+Local-layout adapters exist for EuRoC MAV, TUM-VI, and generic timestamped camera/IMU folders. They are validated with mocked filesystem fixtures. No public-sequence metric is claimed until actual dataset execution is completed.
 
-Before presenting a new result, verify that the report states:
+## Research roadmap
 
-- what failure is being predicted;
-- when the ground-truth failure label occurs;
-- how much warning time is achieved;
-- which baselines use identical data and seeds;
-- whether thresholds were selected on separate data;
-- whether probabilities are calibrated;
-- which scenarios are synthetic, recorded, or physical;
-- which limitations remain unresolved.
+<p align="center"><img src="assets/readme/research_roadmap.svg" alt="SHIELD-VIO research roadmap" width="100%" /></p>
 
-## Responsible use
+1. Connect feature observations and preintegrated IMU increments into a complete executable ESKF sequence.
+2. Run calibrated detector comparisons on identical seeds.
+3. Execute EuRoC and TUM-VI sequences.
+4. Add reliability, lead-time, ablation, and sensitivity studies.
+5. Strengthen recovery and active-perception actions.
+6. Add ROS 2 bag replay and simulator validation.
+7. Proceed to hardware only after dataset and simulation evidence are stable.
 
-SHIELD-VIO is research software for studying failure-aware estimation. It is not a certified navigation, control, or safety product. Real-world use requires independent validation, platform-specific hazard analysis, fault containment, and appropriate supervisory control.
+## Limitations and claim boundary
+
+- The integrated production-quality VIO backend is not complete.
+- The frontend, preintegration, and ESKF are research prototypes.
+- Real public-dataset execution remains pending.
+- The logistic detector has not been benchmarked on real failure data.
+- Conformal coverage may fail under severe non-exchangeable shift.
+- Robust relocalization, map management, loop closure, active perception, ROS 2, simulator, and hardware execution remain incomplete.
+- The navigation shield is supervisory research logic, not a formally verified controller.
+- No production, hardware-safety, state-of-the-art, or formal-guarantee claim is made.
+
+Every reported result should record configuration, seed, estimator backend, detector method, sequence, dependency versions, Git commit, command, runtime, metrics, and artifact paths.
+
+## Citation
+
+```bibtex
+@misc{grosdouli2026shieldvio,
+  title  = {SHIELD-VIO: Estimator Introspection, Calibrated Failure Prediction, and Protective Navigation for Visual--Inertial Autonomy},
+  author = {Grosdouli, Panagiota},
+  year   = {2026},
+  note   = {Open-source research prototype; synthetic validation and public-dataset adapters},
+  url    = {https://github.com/panagiotagrosdouli/SHIELD-VIO}
+}
+```
+
+## License
+
+Released under the MIT License.
