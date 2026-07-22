@@ -1,0 +1,60 @@
+name: Research proposal
+description: Propose an experiment, method, dataset evaluation, or research extension
+title: "[Research]: "
+labels:
+  - research
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Research question
+      description: State the specific question or hypothesis this work would evaluate.
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Explain the scientific gap, failure mode, or comparison that motivates the proposal.
+    validations:
+      required: true
+  - type: textarea
+    id: method
+    attributes:
+      label: Proposed method
+      description: Describe the estimator, detector, calibration, shift, shield, recovery, or evaluation change.
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Evaluation protocol
+      description: Describe data splits, baselines, seeds, failure definitions, metrics, and statistical reporting.
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence
+    attributes:
+      label: Intended evidence level
+      options:
+        - Analytical or unit validation
+        - Synthetic validation
+        - Public-dataset execution
+        - Simulation validation
+        - Hardware validation
+    validations:
+      required: true
+  - type: textarea
+    id: claims
+    attributes:
+      label: Intended claim and limitations
+      description: State what a successful result could support and what it would still not establish.
+    validations:
+      required: true
+  - type: textarea
+    id: reproducibility
+    attributes:
+      label: Reproducibility plan
+      description: List configurations, seeds, manifests, artifacts, and commands that should be preserved.
+    validations:
+      required: true
