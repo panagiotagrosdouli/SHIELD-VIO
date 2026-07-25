@@ -1,0 +1,210 @@
+protocol:
+  name: euroc_benchmark_v1
+  version: 1
+  purpose: prospective_failure_prediction_and_protective_navigation
+  confirmatory: true
+
+dataset:
+  name: EuRoC_MAV
+  modality: monocular_left_plus_imu
+  development_sequences:
+    - MH_01_easy
+    - MH_02_easy
+    - V1_01_easy
+  calibration_sequences:
+    - MH_03_medium
+    - V1_02_medium
+  test_sequences:
+    - MH_04_difficult
+    - MH_05_difficult
+    - V1_03_difficult
+    - V2_01_easy
+    - V2_02_medium
+    - V2_03_difficult
+  trajectory_alignment:
+    primary: SE3
+    secondary: null
+
+failure_definition:
+  prediction_horizons_s: [0.5, 1.0, 2.0, 3.0]
+  translation_error_m: 1.0
+  translation_persistence_s: 0.5
+  rotation_error_deg: 15.0
+  rotation_persistence_s: 0.5
+  invalid_pose_gap_s: 0.5
+  covariance_trace_max: 100.0
+  include_reset_event: true
+  include_relocalization_event: true
+  include_terminal_tracking_failure: true
+
+degradation:
+  seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  severity_levels: [low, medium, high]
+  visual:
+    darkness:
+      low: {gain: 0.75}
+      medium: {gain: 0.50}
+      high: {gain: 0.25}
+    overexposure:
+      low: {gain: 1.25}
+      medium: {gain: 1.75}
+      high: {gain: 2.50}
+    contrast_reduction:
+      low: {factor: 0.75}
+      medium: {factor: 0.50}
+      high: {factor: 0.25}
+    additive_noise:
+      low: {sigma: 5.0}
+      medium: {sigma: 15.0}
+      high: {sigma: 30.0}
+    feature_dropout:
+      low: {probability: 0.10}
+      medium: {probability: 0.30}
+      high: {probability: 0.60}
+    occlusion:
+      low: {area_fraction: 0.10}
+      medium: {area_fraction: 0.25}
+      high: {area_fraction: 0.45}
+    frame_dropout:
+      low: {probability: 0.05}
+      medium: {probability: 0.15}
+      high: {probability: 0.30}
+  inertial:
+    accelerometer_noise:
+      low: {multiplier: 1.5}
+      medium: {multiplier: 3.0}
+      high: {multiplier: 6.0}
+    gyroscope_noise:
+      low: {multiplier: 1.5}
+      medium: {multiplier: 3.0}
+      high: {multiplier: 6.0}
+    bias_drift:
+      low: {multiplier: 1.5}
+      medium: {multiplier: 3.0}
+      high: {multiplier: 6.0}
+    scale_factor_error:
+      low: {fraction: 0.005}
+      medium: {fraction: 0.015}
+      high: {fraction: 0.035}
+    saturation:
+      low: {clip_fraction: 0.95}
+      medium: {clip_fraction: 0.80}
+      high: {clip_fraction: 0.60}
+    axis_failure:
+      low: {duty_cycle: 0.10}
+      medium: {duty_cycle: 0.30}
+      high: {duty_cycle: 0.60}
+    packet_loss:
+      low: {probability: 0.01}
+      medium: {probability: 0.05}
+      high: {probability: 0.15}
+  combined:
+    - name: darkness_plus_gyro_bias
+      visual: darkness
+      inertial: bias_drift
+    - name: frame_dropout_plus_imu_loss
+      visual: frame_dropout
+      inertial: packet_loss
+    - name: occlusion_plus_accel_saturation
+      visual: occlusion
+      inertial: saturation
+
+methods:
+  detectors:
+    - rules
+    - logistic
+    - logistic_calibrated
+    - logistic_calibrated_conformal
+    - full_shift_aware
+  policies:
+    - unshielded
+    - instantaneous_threshold
+    - stateful_shield
+    - oracle_upper_bound
+
+ablations:
+  leave_one_family_out:
+    - visual_health
+    - imu_health
+    - innovation_nis
+    - covariance_uncertainty
+    - temporal_persistence
+    - calibration
+    - conformal
+    - domain_shift
+    - shield_hysteresis
+    - recovery_actions
+
+selection:
+  fit_split: development
+  calibration_split: calibration
+  threshold_split: calibration
+  test_split: test
+  primary_operating_constraint:
+    metric: false_alarms_per_minute
+    maximum: 0.2
+  optimization_target: missed_failure_rate
+
+metrics:
+  trajectory:
+    - ate_rmse
+    - ate_median
+    - rpe_translation
+    - rpe_rotation
+    - valid_pose_availability
+    - reset_count
+    - invalid_pose_duration
+  prediction:
+    - auroc
+    - auprc
+    - sensitivity
+    - specificity
+    - false_alarms_per_minute
+    - missed_failure_rate
+    - warning_time_median
+    - warning_time_lower_quartile
+    - event_precision
+    - event_recall
+    - event_f1
+  calibration:
+    - brier_score
+    - negative_log_likelihood
+    - expected_calibration_error
+    - maximum_calibration_error
+    - conformal_empirical_coverage
+    - conformal_average_width
+  closed_loop:
+    - unsafe_motion_exposure_fraction
+    - intervention_count
+    - intervention_duration
+    - unnecessary_intervention_rate
+    - emergency_stop_count
+    - recovery_success_rate
+    - mission_completion_rate
+    - path_length_overhead
+    - completion_time_overhead
+    - safety_boundary_violation_rate
+
+statistics:
+  experimental_unit: sequence
+  paired_comparisons: true
+  bootstrap_confidence_level: 0.95
+  bootstrap_resamples: 10000
+  report_effect_sizes: true
+  multiple_comparison_correction: holm
+  summaries:
+    - mean
+    - standard_deviation
+    - median
+    - interquartile_range
+    - confidence_interval
+
+reproducibility:
+  require_git_commit: true
+  require_dataset_checksum: true
+  require_calibration_identifier: true
+  require_full_configuration: true
+  require_dependency_versions: true
+  require_host_information: true
+  require_artifact_manifest: true
+  require_completion_status: true
