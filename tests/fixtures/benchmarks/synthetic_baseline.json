@@ -1,0 +1,22 @@
+{
+  "failure_count": 0,
+  "results": [
+    {
+      "ate_max_m": 0.3449218963542558,
+      "ate_mean_m": 0.1148366933125913,
+      "ate_median_m": 0.09489111564017354,
+      "ate_rmse_m": 0.13827022734042477,
+      "error": null,
+      "estimate_path": "results/synthetic_demo/estimated_trajectory.csv",
+      "rpe_delta": 1,
+      "rpe_max_m": 0.3040178086527697,
+      "rpe_mean_m": 0.02907354395958687,
+      "rpe_median_m": 0.007555473939815196,
+      "rpe_rmse_m": 0.056617651731484066,
+      "sample_count": 401,
+      "sequence": "synthetic_seed_7",
+      "status": "ok"
+    }
+  ],
+  "success_count": 1
+}
