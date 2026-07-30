@@ -10,26 +10,36 @@ jobs:
       - run: python -m pip install -e '.[dev]'
       - run: ruff check shield_vio scripts tests
       - run: pytest -q
-      - name: Run deterministic benchmark regression gate
+      - name: Generate deterministic synthetic benchmark
         run: |
-          mkdir -p results/benchmark-gate
+          python scripts/run_synthetic_demo.py \
+            --out results/synthetic_demo \
+            --seed 7
+          python scripts/build_synthetic_benchmark_report.py \
+            results/synthetic_demo \
+            --output results/benchmark-gate/candidate.json
+      - name: Run end-to-end benchmark regression gate
+        run: |
           python scripts/check_benchmark_regression.py \
-            tests/fixtures/benchmarks/baseline.json \
-            tests/fixtures/benchmarks/candidate.json \
+            tests/fixtures/benchmarks/synthetic_baseline.json \
+            results/benchmark-gate/candidate.json \
             --max-relative-increase 0.05 \
             --max-absolute-increase 0.01 \
             --output results/benchmark-gate/regression-result.json
-      - name: Upload benchmark gate report
+      - name: Upload benchmark gate artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: shield-vio-benchmark-gate
-          path: results/benchmark-gate/regression-result.json
+          path: |
+            results/benchmark-gate/*.json
+            results/synthetic_demo/summary.json
+            results/synthetic_demo/estimated_trajectory.csv
+            results/synthetic_demo/ground_truth.csv
           if-no-files-found: error
           retention-days: 14
       - name: Generate synthetic README evidence
         run: |
-          python scripts/run_synthetic_demo.py --out results/synthetic_demo --seed 7
           python scripts/generate_readme_evidence.py \
             --results results/synthetic_demo \
             --output results/readme_evidence
