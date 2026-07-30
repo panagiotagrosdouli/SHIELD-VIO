@@ -101,8 +101,20 @@ def estimate_relative_pose(
         prob=float(confidence),
         threshold=float(ransac_threshold_px),
     )
+    count = len(previous)
+    parallax = np.linalg.norm(current - previous, axis=1)
     if essential is None or ransac_mask is None:
-        raise RuntimeError("essential matrix estimation failed")
+        return RelativePoseMeasurement(
+            rotation=np.eye(3),
+            translation_direction=np.array([1.0, 0.0, 0.0]),
+            inlier_mask=np.zeros(count, dtype=bool),
+            correspondence_count=count,
+            inlier_count=0,
+            inlier_ratio=0.0,
+            median_parallax_px=float(np.median(parallax)),
+            median_epipolar_error_px=float("inf"),
+            is_degenerate=True,
+        )
     if essential.shape[0] > 3:
         essential = essential[:3, :3]
 
@@ -110,16 +122,26 @@ def estimate_relative_pose(
         essential, previous, current, intrinsic, mask=ransac_mask
     )
     if recovered <= 0 or pose_mask is None:
-        raise RuntimeError("relative pose recovery failed")
+        ransac_inliers = ransac_mask.reshape(-1).astype(bool)
+        return RelativePoseMeasurement(
+            rotation=np.eye(3),
+            translation_direction=np.array([1.0, 0.0, 0.0]),
+            inlier_mask=ransac_inliers,
+            correspondence_count=count,
+            inlier_count=int(np.count_nonzero(ransac_inliers)),
+            inlier_ratio=float(np.mean(ransac_inliers)),
+            median_parallax_px=float(np.median(parallax[ransac_inliers]))
+            if np.any(ransac_inliers)
+            else 0.0,
+            median_epipolar_error_px=float("inf"),
+            is_degenerate=True,
+        )
 
     inlier_mask = pose_mask.reshape(-1).astype(bool)
     inlier_count = int(np.count_nonzero(inlier_mask))
-    count = len(previous)
     ratio = inlier_count / count
-    parallax = np.linalg.norm(current - previous, axis=1)
     median_parallax = float(np.median(parallax[inlier_mask])) if inlier_count else 0.0
 
-    # Symmetric point-to-epipolar-line distance in pixels.
     p0 = np.column_stack([previous, np.ones(count)])
     p1 = np.column_stack([current, np.ones(count)])
     fundamental = np.linalg.inv(intrinsic).T @ essential @ np.linalg.inv(intrinsic)
@@ -129,7 +151,9 @@ def estimate_relative_pose(
     denom1 = np.linalg.norm(lines1[:, :2], axis=1)
     denom0 = np.linalg.norm(lines0[:, :2], axis=1)
     valid = inlier_mask & (denom1 > 1e-12) & (denom0 > 1e-12)
-    symmetric_error = 0.5 * numerator * (1.0 / np.maximum(denom1, 1e-12) + 1.0 / np.maximum(denom0, 1e-12))
+    symmetric_error = 0.5 * numerator * (
+        1.0 / np.maximum(denom1, 1e-12) + 1.0 / np.maximum(denom0, 1e-12)
+    )
     median_epipolar = float(np.median(symmetric_error[valid])) if np.any(valid) else float("inf")
 
     degenerate = (
