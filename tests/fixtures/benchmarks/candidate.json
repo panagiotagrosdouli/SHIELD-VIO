@@ -1,0 +1,38 @@
+{
+  "failure_count": 0,
+  "results": [
+    {
+      "sequence": "MH_01_easy",
+      "status": "ok",
+      "estimate_path": "fixtures/MH_01_easy.csv",
+      "sample_count": 120,
+      "ate_rmse_m": 0.123,
+      "ate_mean_m": 0.101,
+      "ate_median_m": 0.096,
+      "ate_max_m": 0.242,
+      "rpe_rmse_m": 0.041,
+      "rpe_mean_m": 0.033,
+      "rpe_median_m": 0.031,
+      "rpe_max_m": 0.091,
+      "rpe_delta": 1,
+      "error": null
+    },
+    {
+      "sequence": "V1_01_easy",
+      "status": "ok",
+      "estimate_path": "fixtures/V1_01_easy.csv",
+      "sample_count": 100,
+      "ate_rmse_m": 0.184,
+      "ate_mean_m": 0.152,
+      "ate_median_m": 0.141,
+      "ate_max_m": 0.334,
+      "rpe_rmse_m": 0.056,
+      "rpe_mean_m": 0.046,
+      "rpe_median_m": 0.043,
+      "rpe_max_m": 0.112,
+      "rpe_delta": 1,
+      "error": null
+    }
+  ],
+  "success_count": 2
+}
