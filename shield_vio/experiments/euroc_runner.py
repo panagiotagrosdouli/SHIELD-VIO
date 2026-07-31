@@ -1,4 +1,4 @@
-"""End-to-end EuRoC IMU propagation, evaluation, and artifact export."""
+"""End-to-end EuRoC propagation, visual fusion, evaluation, and artifact export."""
 from __future__ import annotations
 
 import csv
@@ -23,6 +23,7 @@ from shield_vio.evaluation.euroc import (
     load_euroc_ground_truth,
 )
 from shield_vio.evaluation.metrics import ate, rpe
+from shield_vio.experiments.visual_measurements import VisualMeasurementProvider
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,8 @@ class EuRoCRunSummary:
     trajectory_rows: int
     output_dir: str
     metrics_path: str | None = None
+    visual_provider: str | None = None
+    visual_measurements: int = 0
 
 
 def _state_row(frame_timestamp_ns: int, state: EstimatorState) -> list[object]:
@@ -61,15 +64,14 @@ def _health_row(frame_timestamp_ns: int, health: EstimatorHealth) -> list[object
 
 
 def _write_manifest(summary: EuRoCRunSummary, destination: Path) -> None:
-    artifacts = {
-        "trajectory": "trajectory.csv",
-        "health": "health.csv",
-    }
+    artifacts = {"trajectory": "trajectory.csv", "health": "health.csv"}
     if summary.metrics_path is not None:
         artifacts["metrics"] = Path(summary.metrics_path).name
+    if summary.visual_provider is not None:
+        artifacts["visual_updates"] = "visual_updates.csv"
     manifest = {
-        "schema_version": 2,
-        "experiment": "euroc_imu_propagation",
+        "schema_version": 3,
+        "experiment": "euroc_vio",
         **asdict(summary),
         "artifacts": artifacts,
     }
@@ -110,9 +112,7 @@ def evaluate_run_artifacts(
     estimate = load_runner_trajectory(destination / "trajectory.csv")
     ground_truth = load_euroc_ground_truth(sequence_root)
     timestamps, estimated_positions, gt_positions = associate_ground_truth(
-        estimate,
-        ground_truth,
-        max_gap=max_gap,
+        estimate, ground_truth, max_gap=max_gap
     )
     metrics: dict[str, object] = {
         "sequence": Path(sequence_root).name,
@@ -120,10 +120,7 @@ def evaluate_run_artifacts(
         "duration_seconds": float(timestamps[-1] - timestamps[0]),
         "alignment": "sim3" if with_scale else "se3",
         "ate_rmse_m": ate(
-            estimated_positions,
-            gt_positions,
-            align=True,
-            with_scale=with_scale,
+            estimated_positions, gt_positions, align=True, with_scale=with_scale
         ),
         "rpe_translation_rmse_m": rpe(
             estimated_positions,
@@ -136,8 +133,7 @@ def evaluate_run_artifacts(
         "max_association_gap_seconds": max_gap,
     }
     (destination / "metrics.json").write_text(
-        json.dumps(metrics, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+        json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return metrics
 
@@ -147,6 +143,7 @@ def run_synchronized_frames(
     output_dir: str | Path,
     *,
     backend: EstimatorBackend | None = None,
+    visual_provider: VisualMeasurementProvider | None = None,
 ) -> EuRoCRunSummary:
     packets = list(packets)
     if not packets:
@@ -158,8 +155,10 @@ def run_synchronized_frames(
     estimator = backend or ESKFBackend()
     estimator.initialize(samples[0].timestamp_ns)
     propagated = 0
+    visual_count = 0
     trajectory_rows: list[list[object]] = []
     health_rows: list[list[object]] = []
+    visual_rows: list[list[object]] = []
 
     for packet in packets:
         for sample in packet.imu_samples:
@@ -171,6 +170,32 @@ def run_synchronized_frames(
                 sample.angular_velocity_rad_s,
             )
             propagated += 1
+
+        if visual_provider is not None:
+            measurement = visual_provider.measure(packet, estimator.snapshot())
+            if measurement is not None:
+                estimator.process_visual_update(
+                    packet.frame.timestamp_ns,
+                    measurement.residual,
+                    measurement.measurement_matrix,
+                    measurement.measurement_covariance,
+                )
+                visual_count += 1
+                visual_rows.append(
+                    [
+                        packet.frame.timestamp_ns,
+                        measurement.status,
+                        measurement.detected_features,
+                        measurement.tracked_features,
+                        measurement.correspondence_count,
+                        measurement.inlier_count,
+                        ""
+                        if measurement.inlier_ratio is None
+                        else measurement.inlier_ratio,
+                        estimator.health().innovation_nis,
+                    ]
+                )
+
         trajectory_rows.append(_state_row(packet.frame.timestamp_ns, estimator.snapshot()))
         health_rows.append(_health_row(packet.frame.timestamp_ns, estimator.health()))
 
@@ -221,12 +246,33 @@ def run_synchronized_frames(
         )
         writer.writerows(health_rows)
 
+    if visual_provider is not None:
+        with (destination / "visual_updates.csv").open(
+            "w", encoding="utf-8", newline=""
+        ) as stream:
+            writer = csv.writer(stream)
+            writer.writerow(
+                [
+                    "frame_timestamp_ns",
+                    "status",
+                    "detected_features",
+                    "tracked_features",
+                    "correspondence_count",
+                    "inlier_count",
+                    "inlier_ratio",
+                    "innovation_nis",
+                ]
+            )
+            writer.writerows(visual_rows)
+
     summary = EuRoCRunSummary(
-        estimator.name,
-        len(packets),
-        propagated,
-        len(trajectory_rows),
-        str(destination),
+        backend=estimator.name,
+        camera_frames=len(packets),
+        imu_samples=propagated,
+        trajectory_rows=len(trajectory_rows),
+        output_dir=str(destination),
+        visual_provider=None if visual_provider is None else visual_provider.name,
+        visual_measurements=visual_count,
     )
     _write_manifest(summary, destination)
     return summary
@@ -238,6 +284,7 @@ def run_euroc_sequence(
     *,
     camera: str = "cam0",
     backend: EstimatorBackend | None = None,
+    visual_provider: VisualMeasurementProvider | None = None,
     evaluate: bool = True,
     max_gap: float = 0.02,
     rpe_delta: int = 1,
@@ -246,7 +293,9 @@ def run_euroc_sequence(
     frames = read_camera_frames(sequence_root, camera=camera)
     imu_samples = read_imu_samples(sequence_root)
     packets = synchronize_camera_and_imu(frames, imu_samples, include_pre_first_frame=True)
-    summary = run_synchronized_frames(packets, output_dir, backend=backend)
+    summary = run_synchronized_frames(
+        packets, output_dir, backend=backend, visual_provider=visual_provider
+    )
     if not evaluate:
         return summary
 
@@ -264,6 +313,8 @@ def run_euroc_sequence(
         trajectory_rows=summary.trajectory_rows,
         output_dir=summary.output_dir,
         metrics_path=str(Path(output_dir) / "metrics.json"),
+        visual_provider=summary.visual_provider,
+        visual_measurements=summary.visual_measurements,
     )
     _write_manifest(evaluated, Path(output_dir))
     return evaluated
