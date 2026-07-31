@@ -7,7 +7,11 @@ from pathlib import Path
 import numpy as np
 
 from shield_vio.datasets.euroc import CameraFrame, ImuSample, SynchronizedFrame
-from shield_vio.experiments.euroc_runner import run_synchronized_frames
+from shield_vio.experiments.euroc_runner import (
+    evaluate_run_artifacts,
+    load_runner_trajectory,
+    run_synchronized_frames,
+)
 
 
 def _sample(timestamp_ns: int) -> ImuSample:
@@ -37,6 +41,7 @@ def test_runner_exports_trajectory_health_and_manifest(tmp_path: Path) -> None:
     assert summary.camera_frames == 2
     assert summary.imu_samples == 3
     assert summary.trajectory_rows == 2
+    assert summary.metrics_path is None
 
     output = tmp_path / "results"
     assert (output / "trajectory.csv").is_file()
@@ -54,8 +59,9 @@ def test_runner_exports_trajectory_health_and_manifest(tmp_path: Path) -> None:
     assert health[-1]["propagated_imu_samples"] == "3"
 
     manifest = json.loads((output / "experiment_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == 2
     assert manifest["artifacts"]["trajectory"] == "trajectory.csv"
+    assert "metrics" not in manifest["artifacts"]
 
 
 def test_runner_rejects_stream_without_imu(tmp_path: Path) -> None:
@@ -70,3 +76,36 @@ def test_runner_rejects_stream_without_imu(tmp_path: Path) -> None:
         assert "no IMU samples" in str(error)
     else:
         raise AssertionError("Expected ValueError")
+
+
+def test_evaluate_run_artifacts_writes_ate_and_rpe(tmp_path: Path) -> None:
+    output = tmp_path / "results"
+    output.mkdir()
+    trajectory_path = output / "trajectory.csv"
+    with trajectory_path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["frame_timestamp_ns", "state_timestamp_ns", "px", "py", "pz"])
+        for index in range(4):
+            timestamp_ns = 1_000_000_000 + index * 1_000_000_000
+            writer.writerow([timestamp_ns, timestamp_ns, index, 0.0, 0.0])
+
+    sequence = tmp_path / "MH_01_easy"
+    ground_truth = sequence / "mav0" / "state_groundtruth_estimate0"
+    ground_truth.mkdir(parents=True)
+    with (ground_truth / "data.csv").open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["#timestamp", "p_RS_R_x", "p_RS_R_y", "p_RS_R_z"])
+        for index in range(4):
+            timestamp_ns = 1_000_000_000 + index * 1_000_000_000
+            writer.writerow([timestamp_ns, index, 0.0, 0.0])
+
+    loaded = load_runner_trajectory(trajectory_path)
+    assert loaded.timestamps.tolist() == [0.0, 1.0, 2.0, 3.0]
+
+    metrics = evaluate_run_artifacts(sequence, output, max_gap=0.1)
+
+    assert metrics["associated_samples"] == 4
+    assert metrics["ate_rmse_m"] < 1e-12
+    assert metrics["rpe_translation_rmse_m"] < 1e-12
+    written = json.loads((output / "metrics.json").read_text(encoding="utf-8"))
+    assert written == metrics
