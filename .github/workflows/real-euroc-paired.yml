@@ -1,0 +1,51 @@
+name: Real EuRoC paired benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'shield_vio/**'
+      - 'scripts/run_euroc.py'
+      - 'scripts/compare_real_euroc_runs.py'
+      - '.github/workflows/real-euroc-paired.yml'
+
+jobs:
+  mh01-paired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - name: Download EuRoC MH_01_easy ASL sequence
+        run: |
+          mkdir -p data/euroc
+          curl --fail --location --retry 3 \
+            http://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip \
+            --output data/euroc/MH_01_easy.zip
+          unzip -q data/euroc/MH_01_easy.zip -d data/euroc/MH_01_easy
+      - name: Run real IMU-only baseline
+        run: |
+          python scripts/run_euroc.py data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/imu_only
+      - name: Run real OpenCV rotation configuration
+        run: |
+          python scripts/run_euroc.py data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/opencv_rotation \
+            --opencv-rotation
+      - name: Build paired comparison
+        run: |
+          python scripts/compare_real_euroc_runs.py \
+            results/real_euroc/MH_01_easy/imu_only \
+            results/real_euroc/MH_01_easy/opencv_rotation \
+            --output results/real_euroc/MH_01_easy/comparison.json
+      - name: Upload real benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-vio-real-euroc-mh01-paired
+          path: results/real_euroc/MH_01_easy
+          if-no-files-found: error
+          retention-days: 30
