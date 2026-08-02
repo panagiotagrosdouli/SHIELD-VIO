@@ -1,0 +1,52 @@
+name: Real EuRoC Baseline
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/real-euroc-baseline
+    paths:
+      - scripts/run_real_euroc_baseline.py
+      - .github/workflows/real-euroc-baseline.yml
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project
+        run: python -m pip install -e '.[dev]'
+      - name: Download EuRoC MH_01_easy
+        run: |
+          mkdir -p data
+          curl --fail --location --retry 4 \
+            --output data/MH_01_easy.zip \
+            https://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip
+          unzip -q data/MH_01_easy.zip -d data/MH_01_easy
+      - name: Run real-data baseline
+        run: |
+          python scripts/run_real_euroc_baseline.py \
+            data/MH_01_easy \
+            --output results/real_euroc/MH_01_easy
+      - name: Upload complete benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: euroc-mh01-real-baseline
+          path: results/real_euroc/MH_01_easy
+      - name: Commit compact real metrics
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          mkdir -p results/real_benchmarks/MH_01_easy
+          cp results/real_euroc/MH_01_easy/real_baseline_summary.json \
+             results/real_benchmarks/MH_01_easy/imu_baseline.json
+          git add results/real_benchmarks/MH_01_easy/imu_baseline.json
+          git diff --cached --quiet || git commit -m 'Record real EuRoC MH_01 baseline metrics'
+          git push
