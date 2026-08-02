@@ -93,6 +93,9 @@ def test_rejects_degenerate_geometry(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_camera_intrinsic_conversion_and_validation() -> None:
     matrix = module.camera_matrix_from_intrinsics(np.array([458.0, 457.0, 367.0, 248.0]))
-    assert matrix == pytest.approx([[458.0, 0.0, 367.0], [0.0, 457.0, 248.0], [0.0, 0.0, 1.0]])
+    np.testing.assert_allclose(
+        matrix,
+        np.array([[458.0, 0.0, 367.0], [0.0, 457.0, 248.0], [0.0, 0.0, 1.0]]),
+    )
     with pytest.raises(ValueError, match="focal"):
         module.camera_matrix_from_intrinsics(np.array([0.0, 457.0, 367.0, 248.0]))
