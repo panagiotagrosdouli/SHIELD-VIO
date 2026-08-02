@@ -1,4 +1,4 @@
-"""Sparse KLT feature tracking and auditable tracking-health measurements."""
+"""Sparse KLT tracking with explicit correspondences and health diagnostics."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,26 +17,34 @@ class TrackingMeasurement:
     median_flow_px: float
     median_forward_backward_error_px: float
 
+
+@dataclass(frozen=True)
+class TrackedCorrespondences:
+    """Accepted pixel correspondences between two consecutive frames."""
+
+    timestamp_s: float
+    previous_points_px: np.ndarray
+    current_points_px: np.ndarray
+    forward_backward_error_px: np.ndarray
+    measurement: TrackingMeasurement
+
     def __post_init__(self) -> None:
-        counts = (self.detected_features, self.tracked_features, self.inlier_features)
-        if any(value < 0 for value in counts):
-            raise ValueError("feature counts must be non-negative")
-        if self.inlier_features > self.tracked_features or self.tracked_features > self.detected_features:
-            raise ValueError("feature counts must satisfy inliers <= tracked <= detected")
-        if not 0.0 <= self.tracking_ratio <= 1.0:
-            raise ValueError("tracking_ratio must be in [0, 1]")
-        for value in (self.timestamp_s, self.median_flow_px, self.median_forward_backward_error_px):
-            if not np.isfinite(value) or value < 0:
-                raise ValueError("tracking measurements must be finite and non-negative")
+        previous = np.asarray(self.previous_points_px, dtype=float)
+        current = np.asarray(self.current_points_px, dtype=float)
+        errors = np.asarray(self.forward_backward_error_px, dtype=float)
+        if previous.ndim != 2 or previous.shape[1:] != (2,):
+            raise ValueError("previous_points_px must be an Nx2 array")
+        if current.shape != previous.shape or errors.shape != (len(previous),):
+            raise ValueError("correspondence arrays must have matching lengths")
+        if not all(np.all(np.isfinite(value)) for value in (previous, current, errors)):
+            raise ValueError("correspondence arrays must be finite")
+        object.__setattr__(self, "previous_points_px", previous.copy())
+        object.__setattr__(self, "current_points_px", current.copy())
+        object.__setattr__(self, "forward_backward_error_px", errors.copy())
 
 
 class KLTFeatureTracker:
-    """Track Shi-Tomasi corners using pyramidal Lucas-Kanade optical flow.
-
-    A forward-backward consistency check rejects unstable correspondences.  The
-    class reports health statistics only; it does not claim to produce a visual
-    pose constraint or a full VIO update.
-    """
+    """Track Shi-Tomasi corners with pyramidal LK and FB rejection."""
 
     def __init__(
         self,
@@ -45,9 +53,10 @@ class KLTFeatureTracker:
         quality_level: float = 0.01,
         min_distance_px: float = 10.0,
         forward_backward_threshold_px: float = 1.5,
+        replenish_below: int = 80,
     ) -> None:
-        if max_features <= 0:
-            raise ValueError("max_features must be positive")
+        if max_features <= 0 or replenish_below < 0 or replenish_below > max_features:
+            raise ValueError("invalid feature-count configuration")
         if not 0.0 < quality_level <= 1.0:
             raise ValueError("quality_level must be in (0, 1]")
         if min_distance_px <= 0 or forward_backward_threshold_px <= 0:
@@ -56,6 +65,7 @@ class KLTFeatureTracker:
         self.quality_level = float(quality_level)
         self.min_distance_px = float(min_distance_px)
         self.forward_backward_threshold_px = float(forward_backward_threshold_px)
+        self.replenish_below = int(replenish_below)
         self._previous_image: np.ndarray | None = None
         self._previous_points: np.ndarray | None = None
         self._last_timestamp_s: float | None = None
@@ -71,19 +81,29 @@ class KLTFeatureTracker:
             array = np.clip(array, 0, 255).astype(np.uint8)
         return array
 
-    def _detect(self, image: np.ndarray) -> np.ndarray:
+    def _detect(self, image: np.ndarray, existing: np.ndarray | None = None) -> np.ndarray:
+        mask = np.full(image.shape, 255, dtype=np.uint8)
+        if existing is not None:
+            for point in existing.reshape(-1, 2):
+                cv2.circle(mask, tuple(np.rint(point).astype(int)), int(self.min_distance_px), 0, -1)
+        remaining = self.max_features - (0 if existing is None else len(existing))
+        if remaining <= 0:
+            return np.empty((0, 1, 2), dtype=np.float32)
         points = cv2.goodFeaturesToTrack(
             image,
-            maxCorners=self.max_features,
+            maxCorners=remaining,
             qualityLevel=self.quality_level,
             minDistance=self.min_distance_px,
+            mask=mask,
             blockSize=7,
         )
         if points is None:
             return np.empty((0, 1, 2), dtype=np.float32)
         return points.astype(np.float32, copy=False)
 
-    def update(self, image: np.ndarray, timestamp_s: float) -> TrackingMeasurement:
+    def update_correspondences(
+        self, image: np.ndarray, timestamp_s: float
+    ) -> TrackedCorrespondences:
         frame = self._validate_image(image)
         timestamp = float(timestamp_s)
         if not np.isfinite(timestamp) or timestamp < 0:
@@ -96,64 +116,67 @@ class KLTFeatureTracker:
             self._previous_image = frame.copy()
             self._previous_points = points
             self._last_timestamp_s = timestamp
-            return TrackingMeasurement(timestamp, len(points), 0, 0, 0.0, 0.0, 0.0)
+            measurement = TrackingMeasurement(timestamp, len(points), 0, 0, 0.0, 0.0, 0.0)
+            empty = np.empty((0, 2), dtype=float)
+            return TrackedCorrespondences(timestamp, empty, empty, np.empty(0), measurement)
 
         previous_points = self._previous_points
         if previous_points is None or len(previous_points) == 0:
             previous_points = self._detect(self._previous_image)
-
         detected = int(len(previous_points))
+        previous_inliers = np.empty((0, 2), dtype=float)
+        current_inliers = np.empty((0, 2), dtype=float)
+        fb_inliers = np.empty(0, dtype=float)
         tracked = 0
-        inliers = 0
-        median_flow = 0.0
-        median_fb_error = 0.0
-        accepted_points = np.empty((0, 1, 2), dtype=np.float32)
 
         if detected:
-            forward, forward_status, _ = cv2.calcOpticalFlowPyrLK(
+            forward, status_forward, _ = cv2.calcOpticalFlowPyrLK(
                 self._previous_image, frame, previous_points, None
             )
-            if forward is not None and forward_status is not None:
-                valid_forward = forward_status.reshape(-1).astype(bool)
-                tracked = int(np.count_nonzero(valid_forward))
-                backward, backward_status, _ = cv2.calcOpticalFlowPyrLK(
+            if forward is not None and status_forward is not None:
+                backward, status_backward, _ = cv2.calcOpticalFlowPyrLK(
                     frame, self._previous_image, forward, None
                 )
-                if backward is not None and backward_status is not None:
-                    valid_backward = backward_status.reshape(-1).astype(bool)
-                    fb_error = np.linalg.norm(
-                        previous_points.reshape(-1, 2) - backward.reshape(-1, 2), axis=1
-                    )
-                    inlier_mask = (
+                valid_forward = status_forward.reshape(-1).astype(bool)
+                tracked = int(np.count_nonzero(valid_forward))
+                if backward is not None and status_backward is not None:
+                    valid_backward = status_backward.reshape(-1).astype(bool)
+                    previous_xy = previous_points.reshape(-1, 2)
+                    current_xy = forward.reshape(-1, 2)
+                    errors = np.linalg.norm(previous_xy - backward.reshape(-1, 2), axis=1)
+                    keep = (
                         valid_forward
                         & valid_backward
-                        & np.isfinite(fb_error)
-                        & (fb_error <= self.forward_backward_threshold_px)
+                        & np.isfinite(errors)
+                        & (errors <= self.forward_backward_threshold_px)
                     )
-                    accepted_points = forward.reshape(-1, 1, 2)[inlier_mask].astype(np.float32)
-                    inliers = int(np.count_nonzero(inlier_mask))
-                    if inliers:
-                        flow = np.linalg.norm(
-                            forward.reshape(-1, 2)[inlier_mask]
-                            - previous_points.reshape(-1, 2)[inlier_mask],
-                            axis=1,
-                        )
-                        median_flow = float(np.median(flow))
-                        median_fb_error = float(np.median(fb_error[inlier_mask]))
+                    previous_inliers = previous_xy[keep]
+                    current_inliers = current_xy[keep]
+                    fb_inliers = errors[keep]
 
-        if len(accepted_points) < max(20, self.max_features // 5):
-            accepted_points = self._detect(frame)
-
-        self._previous_image = frame.copy()
-        self._previous_points = accepted_points
-        self._last_timestamp_s = timestamp
-        ratio = inliers / detected if detected else 0.0
-        return TrackingMeasurement(
-            timestamp_s=timestamp,
-            detected_features=detected,
-            tracked_features=tracked,
-            inlier_features=inliers,
-            tracking_ratio=float(ratio),
-            median_flow_px=median_flow,
-            median_forward_backward_error_px=median_fb_error,
+        inliers = len(current_inliers)
+        flow = np.linalg.norm(current_inliers - previous_inliers, axis=1) if inliers else np.empty(0)
+        measurement = TrackingMeasurement(
+            timestamp,
+            detected,
+            tracked,
+            inliers,
+            float(inliers / detected) if detected else 0.0,
+            float(np.median(flow)) if inliers else 0.0,
+            float(np.median(fb_inliers)) if inliers else 0.0,
         )
+
+        retained = current_inliers.reshape(-1, 1, 2).astype(np.float32)
+        if len(retained) < self.replenish_below:
+            new_points = self._detect(frame, retained)
+            retained = np.concatenate([retained, new_points]) if len(retained) else new_points
+        self._previous_image = frame.copy()
+        self._previous_points = retained
+        self._last_timestamp_s = timestamp
+        return TrackedCorrespondences(
+            timestamp, previous_inliers, current_inliers, fb_inliers, measurement
+        )
+
+    def update(self, image: np.ndarray, timestamp_s: float) -> TrackingMeasurement:
+        """Compatibility wrapper returning only health diagnostics."""
+        return self.update_correspondences(image, timestamp_s).measurement
