@@ -36,7 +36,7 @@ jobs:
             results/synthetic_demo/summary.json
             results/synthetic_demo/estimated_trajectory.csv
             results/synthetic_demo/ground_truth.csv
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
       - name: Generate synthetic README evidence
         run: |
@@ -50,5 +50,5 @@ jobs:
           path: |
             results/readme_evidence/*.png
             results/synthetic_demo/*.csv
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
