@@ -48,7 +48,6 @@ def test_metric_pnp_recovers_known_motion(monkeypatch: pytest.MonkeyPatch) -> No
         min_pnp_correspondences=8,
     )
     points = _scene()
-    left_transform = np.eye(4)
     right_transform = np.eye(4)
     right_transform[:3, 3] = baseline
     angle = np.deg2rad(2.0)
