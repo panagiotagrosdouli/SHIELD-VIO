@@ -88,8 +88,12 @@ def optimize_fixed_rotation_translations(graph: PoseGraph) -> PoseGraphOptimizat
         solution, _, rank, _ = np.linalg.lstsq(design, observation, rcond=None)
         if rank < variable_count:
             raise ValueError("pose graph translation system is underconstrained")
+        initial_vector = np.concatenate(
+            [by_id[node_id].pose[:3, 3] for node_id in variable_ids]
+        )
     else:
         solution = np.empty(0, dtype=float)
+        initial_vector = solution.copy()
         rank = 0
 
     optimized_nodes: list[PoseGraphNode] = []
@@ -102,9 +106,6 @@ def optimize_fixed_rotation_translations(graph: PoseGraph) -> PoseGraphOptimizat
         else:
             optimized_nodes.append(PoseGraphNode(node.node_id, node.pose, fixed=True))
 
-    initial_vector = np.concatenate(
-        [by_id[node_id].pose[:3, 3] for node_id in variable_ids]
-    )
     initial_rmse = _weighted_rmse(design, observation, initial_vector)
     final_rmse = _weighted_rmse(design, observation, solution)
     return PoseGraphOptimizationResult(
