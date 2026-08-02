@@ -53,9 +53,13 @@ class KLTFeatureTracker:
         quality_level: float = 0.01,
         min_distance_px: float = 10.0,
         forward_backward_threshold_px: float = 1.5,
-        replenish_below: int = 80,
+        replenish_below: int | None = None,
     ) -> None:
-        if max_features <= 0 or replenish_below < 0 or replenish_below > max_features:
+        if max_features <= 0:
+            raise ValueError("max_features must be positive")
+        if replenish_below is None:
+            replenish_below = min(80, max_features)
+        elif replenish_below < 0 or replenish_below > max_features:
             raise ValueError("invalid feature-count configuration")
         if not 0.0 < quality_level <= 1.0:
             raise ValueError("quality_level must be in (0, 1]")
