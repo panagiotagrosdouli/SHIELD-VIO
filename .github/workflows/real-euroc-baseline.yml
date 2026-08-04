@@ -23,17 +23,41 @@ jobs:
           python-version: '3.11'
       - name: Install project
         run: python -m pip install -e '.[dev]'
+      - name: Restore EuRoC MH_01_easy archive
+        uses: actions/cache@v4
+        with:
+          path: data/euroc/MH_01_easy.zip
+          key: euroc-mh01-asl-v1
       - name: Download EuRoC MH_01_easy
+        env:
+          EUROC_URL: https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/263889/1/MH_01_easy.zip
         run: |
-          mkdir -p data
-          curl --fail --location --retry 4 \
-            --output data/MH_01_easy.zip \
-            https://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip
-          unzip -q data/MH_01_easy.zip -d data/MH_01_easy
+          set -euo pipefail
+          mkdir -p data/euroc
+          archive=data/euroc/MH_01_easy.zip
+          if [[ -f "$archive" ]] && ! unzip -tq "$archive"; then
+            rm "$archive"
+          fi
+          if [[ ! -f "$archive" ]]; then
+            curl \
+              --fail \
+              --location \
+              --proto '=https' \
+              --retry 5 \
+              --retry-all-errors \
+              --retry-delay 5 \
+              --connect-timeout 30 \
+              --max-time 1200 \
+              --output "${archive}.part" \
+              "$EUROC_URL"
+            unzip -tq "${archive}.part"
+            mv "${archive}.part" "$archive"
+          fi
+          unzip -q "$archive" -d data/euroc/MH_01_easy
       - name: Run real-data baseline
         run: |
           python scripts/run_real_euroc_baseline.py \
-            data/MH_01_easy \
+            data/euroc/MH_01_easy \
             --output results/real_euroc/MH_01_easy
       - name: Upload complete benchmark artifacts
         uses: actions/upload-artifact@v4
