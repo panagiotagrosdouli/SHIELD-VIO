@@ -284,6 +284,33 @@ docker run --rm -v "$(pwd)/results:/app/results" shield-vio python scripts/run_a
 
 Docker reproduces the software pipeline. It does not imply GPU, ROS 2, public-dataset, simulator, or hardware validation.
 
+### Paper protocol and first public-data slice
+
+The frozen paper scope, observable failure definition, split policy, baseline matrix,
+experiment protocol, ablation plan, reproducibility checklist, manuscript outline, and
+implementation roadmap are maintained in the ten root-level research documents beginning
+with [`PAPER_SCOPE.md`](PAPER_SCOPE.md) and [`CLAIM_EVIDENCE_MATRIX.md`](CLAIM_EVIDENCE_MATRIX.md).
+
+After downloading a real EuRoC sequence in its standard `mav0` layout, run the estimator and
+the first failure-prediction slice with:
+
+```bash
+python scripts/run_euroc.py data/euroc/MH_01_easy \
+  --output results/real_euroc/MH_01_easy/opencv_rotation \
+  --opencv-rotation
+python scripts/run_paper_vertical_slice.py \
+  --run-dir results/real_euroc/MH_01_easy/opencv_rotation \
+  --sequence-root data/euroc/MH_01_easy \
+  --output results/real_euroc/MH_01_easy/paper_vertical_slice \
+  --config configs/paper/vertical_slice_smoke.yaml
+```
+
+This command emits standardized causal health features, observable future-failure targets,
+three heuristic baselines, logistic and Platt-calibrated predictions, metrics, vector figures,
+source tables, and a complete manifest. It is explicitly labeled `PUBLIC_DATASET_SMOKE`: one
+real sequence with analytic synthetic train/calibration/validation data verifies execution but
+does not confirm H1-H5.
+
 ## Repository map
 
 ```text

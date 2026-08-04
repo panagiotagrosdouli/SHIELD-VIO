@@ -2,6 +2,13 @@ name: Real EuRoC paired benchmark
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'shield_vio/**'
+      - 'scripts/run_euroc.py'
+      - 'scripts/run_paper_vertical_slice.py'
+      - 'configs/paper/vertical_slice_smoke.yaml'
+      - '.github/workflows/real-euroc-paired.yml'
   push:
     branches: [main]
     paths:
@@ -54,6 +61,14 @@ jobs:
             results/real_euroc/MH_01_easy/imu_only \
             results/real_euroc/MH_01_easy/opencv_rotation \
             --output results/real_euroc/MH_01_easy/comparison.json
+      - name: Run public-data failure-prediction vertical slice
+        run: |
+          python scripts/run_paper_vertical_slice.py \
+            --run-dir results/real_euroc/MH_01_easy/opencv_rotation \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/paper_vertical_slice \
+            --config configs/paper/vertical_slice_smoke.yaml \
+            --seed 7
       - name: Upload real benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
