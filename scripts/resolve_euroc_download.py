@@ -51,6 +51,58 @@ def _resources(payload: dict[str, Any], relation: str) -> list[dict[str, Any]]:
     return [resource for resource in resources if isinstance(resource, dict)]
 
 
+def _walk_objects(value: Any):
+    """Yield every JSON object, independent of the DSpace HAL nesting version."""
+
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk_objects(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_objects(child)
+
+
+def _linked_item(
+    resource: dict[str, Any],
+    *,
+    root: str,
+    handle: str,
+    load_json: Callable[[str], dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Extract an item from either old or current DSpace discovery wrappers."""
+
+    embedded = resource.get("_embedded")
+    indexable = embedded.get("indexableObject") if isinstance(embedded, dict) else None
+    if isinstance(indexable, dict) and indexable.get("handle") == handle:
+        links = resource.get("_links")
+        relation = links.get("indexableObject") if isinstance(links, dict) else None
+        href = relation.get("href") if isinstance(relation, dict) else None
+        if isinstance(href, str) and href:
+            return load_json(urljoin(root, href))
+        indexable_links = indexable.get("_links")
+        self_link = indexable_links.get("self") if isinstance(indexable_links, dict) else None
+        href = self_link.get("href") if isinstance(self_link, dict) else None
+        if isinstance(href, str) and href:
+            return load_json(urljoin(root, href))
+        return indexable
+
+    if resource.get("handle") != handle:
+        return None
+    links = resource.get("_links")
+    self_link = links.get("self") if isinstance(links, dict) else None
+    href = self_link.get("href") if isinstance(self_link, dict) else None
+    if isinstance(href, str) and href:
+        return load_json(urljoin(root, href))
+    if isinstance(links, dict) and "bundles" in links:
+        return resource
+
+    item_id = resource.get("uuid") or resource.get("id")
+    if isinstance(item_id, str) and item_id:
+        return load_json(urljoin(root, f"core/items/{item_id}"))
+    return None
+
+
 def _resolve_item(
     root: str,
     handle: str,
@@ -64,23 +116,37 @@ def _resolve_item(
         except HTTPError as exc:
             failures.append(f"{identifier} -> HTTP {exc.code}")
 
-    search_url = urljoin(root, "discover/search/objects") + "?" + urlencode(
-        {"query": f'"{handle}"', "dsoType": "item", "size": 100}
+    search_queries = (
+        f'"{handle}"',
+        handle,
+        f'dc.identifier.uri:"http://hdl.handle.net/{handle}"',
     )
-    try:
-        search = load_json(search_url)
-        results = search["_embedded"]["searchResults"]["_embedded"]["objects"]
-    except (HTTPError, KeyError, TypeError) as exc:
-        failures.append(f"Discovery lookup -> {exc}")
-    else:
-        for result in results if isinstance(results, list) else []:
+    for query in search_queries:
+        search_url = urljoin(root, "discover/search/objects") + "?" + urlencode(
+            {"query": query, "dsoType": "item", "size": 100}
+        )
+        try:
+            search = load_json(search_url)
+        except HTTPError as exc:
+            failures.append(f"Discovery {query!r} -> HTTP {exc.code}")
+            continue
+
+        for resource in _walk_objects(search):
             try:
-                item = result["_embedded"]["indexableObject"]
-            except (KeyError, TypeError):
+                item = _linked_item(
+                    resource,
+                    root=root,
+                    handle=handle,
+                    load_json=load_json,
+                )
+            except HTTPError as exc:
+                failures.append(f"Discovery item link -> HTTP {exc.code}")
                 continue
-            if isinstance(item, dict) and item.get("handle") == handle:
-                item_url = urljoin(root, _link(result, "indexableObject"))
-                return load_json(item_url)
+            if item is not None:
+                return item
+
+        top_level = ", ".join(sorted(search)) or "<empty>"
+        failures.append(f"Discovery {query!r} had no matching item (keys: {top_level})")
 
     detail = "; ".join(failures)
     raise RuntimeError(f"Could not resolve hdl:{handle} through DSpace ({detail})")
