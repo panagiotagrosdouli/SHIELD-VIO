@@ -28,13 +28,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/euroc/MH_01_easy.zip
-          key: euroc-mh01-asl-v1
+          key: euroc-mh01-asl-md5-5076cd8923429f1c51c72ae172e14aea
       - name: Download EuRoC MH_01_easy
         run: |
           set -euo pipefail
           mkdir -p data/euroc
           archive=data/euroc/MH_01_easy.zip
-          if [[ -f "$archive" ]] && ! unzip -tq "$archive"; then
+          expected_md5=5076cd8923429f1c51c72ae172e14aea
+          if [[ -f "$archive" ]] && \
+             [[ "$(md5sum "$archive" | cut -d ' ' -f 1)" != "$expected_md5" ]]; then
             rm "$archive"
           fi
           if [[ ! -f "$archive" ]]; then
@@ -50,9 +52,21 @@ jobs:
               --max-time 1200 \
               --output "${archive}.part" \
               "$euroc_url"
+            actual_md5="$(md5sum "${archive}.part" | cut -d ' ' -f 1)"
+            echo "Downloaded archive MD5: $actual_md5"
+            echo "Downloaded archive SHA-256: $(sha256sum "${archive}.part" | cut -d ' ' -f 1)"
+            [[ "$actual_md5" == "$expected_md5" ]]
             unzip -tq "${archive}.part"
             mv "${archive}.part" "$archive"
           fi
+          archive_entries="$(unzip -Z1 "$archive")"
+          for required in \
+            mav0/imu0/data.csv \
+            mav0/cam0/data.csv \
+            mav0/cam1/data.csv \
+            mav0/state_groundtruth_estimate0/data.csv; do
+            grep -Fqx "$required" <<< "$archive_entries"
+          done
           unzip -q "$archive" -d data/euroc/MH_01_easy
       - name: Run real-data baseline
         run: |
