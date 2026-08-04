@@ -52,6 +52,8 @@ jobs:
               --retry-delay 5 \
               --connect-timeout 30 \
               --max-time 1200 \
+              -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
+              -H "Referer: https://www.research-collection.ethz.ch/" \
               --output "${archive}.part" \
               "$EUROC_URL"
             unzip -tq "${archive}.part"
