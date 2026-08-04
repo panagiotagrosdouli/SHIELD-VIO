@@ -8,6 +8,7 @@ import json
 import sys
 from collections.abc import Callable
 from typing import Any
+from urllib.error import HTTPError
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
@@ -50,6 +51,41 @@ def _resources(payload: dict[str, Any], relation: str) -> list[dict[str, Any]]:
     return [resource for resource in resources if isinstance(resource, dict)]
 
 
+def _resolve_item(
+    root: str,
+    handle: str,
+    load_json: Callable[[str], dict[str, Any]],
+) -> dict[str, Any]:
+    failures: list[str] = []
+    for identifier in (f"hdl:{handle}", handle, f"https://hdl.handle.net/{handle}"):
+        pid_url = urljoin(root, "pid/find") + "?" + urlencode({"id": identifier})
+        try:
+            return load_json(pid_url)
+        except HTTPError as exc:
+            failures.append(f"{identifier} -> HTTP {exc.code}")
+
+    search_url = urljoin(root, "discover/search/objects") + "?" + urlencode(
+        {"query": f'"{handle}"', "dsoType": "item", "size": 100}
+    )
+    try:
+        search = load_json(search_url)
+        results = search["_embedded"]["searchResults"]["_embedded"]["objects"]
+    except (HTTPError, KeyError, TypeError) as exc:
+        failures.append(f"Discovery lookup -> {exc}")
+    else:
+        for result in results if isinstance(results, list) else []:
+            try:
+                item = result["_embedded"]["indexableObject"]
+            except (KeyError, TypeError):
+                continue
+            if isinstance(item, dict) and item.get("handle") == handle:
+                item_url = urljoin(root, _link(result, "indexableObject"))
+                return load_json(item_url)
+
+    detail = "; ".join(failures)
+    raise RuntimeError(f"Could not resolve hdl:{handle} through DSpace ({detail})")
+
+
 def resolve_download_url(
     *,
     handle: str = DEFAULT_HANDLE,
@@ -60,8 +96,7 @@ def resolve_download_url(
     """Return the public content URL for one filename in a DSpace item."""
 
     root = api_root.rstrip("/") + "/"
-    pid_url = urljoin(root, "pid/find") + "?" + urlencode({"id": f"hdl:{handle}"})
-    item = load_json(pid_url)
+    item = _resolve_item(root, handle, load_json)
 
     bundles_url = urljoin(root, _link(item, "bundles"))
     bundles = _resources(load_json(bundles_url + "?size=100"), "bundles")
