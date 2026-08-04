@@ -1,0 +1,27 @@
+schema_version: 1
+dataset: EuRoC_MAV
+source: https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets
+split_unit: physical_sequence
+splits:
+  train:
+    - MH_01_easy
+    - MH_02_easy
+    - V1_01_easy
+  calibration:
+    - MH_03_medium
+    - V1_02_medium
+  validation:
+    - V2_01_easy
+    - V2_02_medium
+  test:
+    - MH_04_difficult
+    - MH_05_difficult
+    - V1_03_difficult
+    - V2_03_difficult
+  shifted_test: []
+invariants:
+  derived_conditions_inherit_parent_split: true
+  random_frame_splits_forbidden: true
+  test_used_for_fitting: false
+status: frozen_before_confirmatory_execution
+

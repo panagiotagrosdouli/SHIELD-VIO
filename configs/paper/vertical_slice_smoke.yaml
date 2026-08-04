@@ -1,0 +1,23 @@
+evidence_level: PUBLIC_DATASET_SMOKE
+confirmatory: false
+history_seconds: 1.0
+horizon_seconds: 2.0
+failure_definition:
+  criterion: se3_aligned_position_error
+  threshold_m: 1.0
+  persistence_seconds: 0.5
+  max_ground_truth_gap_seconds: 0.02
+heuristics:
+  covariance_trace_threshold: 1.0
+  tracked_feature_count_threshold: 12
+  innovation_nis_threshold: 11.345
+learned_baseline:
+  method: logistic_regression
+  training_domain: ANALYTIC_SYNTHETIC_HEALTH_V1
+  calibration: platt_logit
+  validation_false_positive_rate_max: 0.05
+seed: 7
+claim_boundary: >-
+  This configuration verifies end-to-end execution on one real public sequence after
+  analytic synthetic training/calibration/validation. It cannot confirm H1-H5.
+
