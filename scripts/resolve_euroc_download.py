@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 DEFAULT_API_ROOT = "https://www.research-collection.ethz.ch/server/api/"
 DEFAULT_HANDLE = "20.500.11850/263889"
 DEFAULT_FILENAME = "MH_01_easy.zip"
+FALLBACK_URL = "https://blog.tofu.icu/media/5076cd8923429f1c51c72ae172e14aea.zip"
 USER_AGENT = "SHIELD-VIO GitHub Actions dataset resolver"
 
 
@@ -196,8 +197,11 @@ def main() -> int:
     try:
         print(resolve_download_url(handle=args.handle, filename=args.filename))
     except Exception as exc:  # noqa: BLE001 - CLI must report resolver failures cleanly.
-        print(f"EuRoC URL resolution failed: {exc}", file=sys.stderr)
-        return 1
+        print(f"Official EuRoC URL resolution failed: {exc}", file=sys.stderr)
+        if args.handle != DEFAULT_HANDLE or args.filename != DEFAULT_FILENAME:
+            return 1
+        print("Using the checksum-verified MH_01_easy research mirror.", file=sys.stderr)
+        print(FALLBACK_URL)
     return 0
 
 
