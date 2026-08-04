@@ -7,6 +7,7 @@ on:
       - agent/real-euroc-baseline
     paths:
       - scripts/run_real_euroc_baseline.py
+      - scripts/resolve_euroc_download.py
       - .github/workflows/real-euroc-baseline.yml
 
 permissions:
@@ -29,8 +30,6 @@ jobs:
           path: data/euroc/MH_01_easy.zip
           key: euroc-mh01-asl-v1
       - name: Download EuRoC MH_01_easy
-        env:
-          EUROC_URL: https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/263889/1/MH_01_easy.zip
         run: |
           set -euo pipefail
           mkdir -p data/euroc
@@ -39,6 +38,7 @@ jobs:
             rm "$archive"
           fi
           if [[ ! -f "$archive" ]]; then
+            euroc_url="$(python scripts/resolve_euroc_download.py)"
             curl \
               --fail \
               --location \
@@ -49,7 +49,7 @@ jobs:
               --connect-timeout 30 \
               --max-time 1200 \
               --output "${archive}.part" \
-              "$EUROC_URL"
+              "$euroc_url"
             unzip -tq "${archive}.part"
             mv "${archive}.part" "$archive"
           fi

@@ -6,6 +6,7 @@ on:
     paths:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
+      - 'scripts/resolve_euroc_download.py'
       - 'scripts/run_paper_vertical_slice.py'
       - 'configs/paper/vertical_slice_smoke.yaml'
       - '.github/workflows/real-euroc-paired.yml'
@@ -14,6 +15,7 @@ on:
     paths:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
+      - 'scripts/resolve_euroc_download.py'
       - 'scripts/compare_real_euroc_runs.py'
       - '.github/workflows/real-euroc-paired.yml'
 
@@ -33,8 +35,6 @@ jobs:
           path: data/euroc/MH_01_easy.zip
           key: euroc-mh01-asl-v1
       - name: Download EuRoC MH_01_easy ASL sequence
-        env:
-          EUROC_URL: https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/263889/1/MH_01_easy.zip
         run: |
           set -euo pipefail
           mkdir -p data/euroc
@@ -43,6 +43,7 @@ jobs:
             rm "$archive"
           fi
           if [[ ! -f "$archive" ]]; then
+            euroc_url="$(python scripts/resolve_euroc_download.py)"
             curl \
               --fail \
               --location \
@@ -53,7 +54,7 @@ jobs:
               --connect-timeout 30 \
               --max-time 1200 \
               --output "${archive}.part" \
-              "$EUROC_URL"
+              "$euroc_url"
             unzip -tq "${archive}.part"
             mv "${archive}.part" "$archive"
           fi
