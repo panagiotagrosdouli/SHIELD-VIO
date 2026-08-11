@@ -6,7 +6,6 @@ on:
     paths:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
-      - 'scripts/resolve_euroc_download.py'
       - 'scripts/run_paper_vertical_slice.py'
       - 'configs/paper/vertical_slice_smoke.yaml'
       - '.github/workflows/real-euroc-paired.yml'
@@ -15,7 +14,6 @@ on:
     paths:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
-      - 'scripts/resolve_euroc_download.py'
       - 'scripts/compare_real_euroc_runs.py'
       - '.github/workflows/real-euroc-paired.yml'
 
@@ -29,36 +27,25 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -e '.[dev]'
-      - name: Restore EuRoC MH_01_easy archive
-        uses: actions/cache@v4
-        with:
-          path: data/euroc/MH_01_easy.zip
-          key: euroc-mh01-asl-v1
       - name: Download EuRoC MH_01_easy ASL sequence
+        env:
+          EUROC_URL: https://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip
         run: |
           set -euo pipefail
           mkdir -p data/euroc
-          archive=data/euroc/MH_01_easy.zip
-          if [[ -f "$archive" ]] && ! unzip -tq "$archive"; then
-            rm "$archive"
-          fi
-          if [[ ! -f "$archive" ]]; then
-            euroc_url="$(python scripts/resolve_euroc_download.py)"
-            curl \
-              --fail \
-              --location \
-              --proto '=https' \
-              --retry 5 \
-              --retry-all-errors \
-              --retry-delay 5 \
-              --connect-timeout 30 \
-              --max-time 1200 \
-              --output "${archive}.part" \
-              "$euroc_url"
-            unzip -tq "${archive}.part"
-            mv "${archive}.part" "$archive"
-          fi
-          unzip -q "$archive" -d data/euroc/MH_01_easy
+          curl \
+            --fail \
+            --location \
+            --proto '=https' \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --connect-timeout 20 \
+            --max-time 600 \
+            --output data/euroc/MH_01_easy.zip \
+            "$EUROC_URL"
+          unzip -tq data/euroc/MH_01_easy.zip
+          unzip -q data/euroc/MH_01_easy.zip -d data/euroc/MH_01_easy
       - name: Run real IMU-only baseline
         run: |
           python scripts/run_euroc.py data/euroc/MH_01_easy \
