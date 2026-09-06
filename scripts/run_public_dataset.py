@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a local EuRoC/TUM-VI export and record deterministic identity."""
+"""Execute a local EuRoC/TUM-VI sequence through the common Phase C smoke path."""
 from __future__ import annotations
 
 import argparse
@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 
 from shield_vio.datasets.public import validate_public_sequence
+from shield_vio.experiments.euroc_runner import run_euroc_sequence
+from shield_vio.experiments.public_prediction import build_public_prediction_artifacts
+from shield_vio.experiments.tumvi_runner import run_tumvi_sequence
 
 
 def main() -> None:
@@ -15,27 +18,40 @@ def main() -> None:
     parser.add_argument("--sequence", required=True)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--failure-config", type=Path, default=Path("configs/paper/failure_public_smoke_v1.yaml"))
     args = parser.parse_args()
+
     validated = validate_public_sequence(args.dataset, args.root)
     if validated.sequence_name != args.sequence:
-        raise SystemExit(
-            f"sequence identity mismatch: requested {args.sequence!r}, local root is {validated.sequence_name!r}"
-        )
+        raise SystemExit(f"sequence identity mismatch: requested {args.sequence!r}, local root is {validated.sequence_name!r}")
     args.output.mkdir(parents=True, exist_ok=True)
-    manifest = {
-        "evidence_level": "DATASET_VALIDATED",
-        "confirmatory": False,
-        "dataset": validated.dataset_name,
-        "sequence": validated.sequence_name,
-        "camera_rows": validated.camera_rows,
-        "imu_rows": validated.imu_rows,
+    validation = {
+        "evidence_level": "DATASET_VALIDATED", "confirmatory": False,
+        "dataset": validated.dataset_name, "sequence": validated.sequence_name,
+        "camera_rows": validated.camera_rows, "imu_rows": validated.imu_rows,
         "ground_truth_rows": validated.ground_truth_rows,
         "dataset_fingerprint": validated.fingerprint,
-        "note": "Validation only. PUBLIC_DATASET_SMOKE requires estimator execution plus canonical health/targets.",
     }
-    (args.output / "dataset_validation_manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    (args.output / "dataset_validation_manifest.json").write_text(json.dumps(validation, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if args.validate_only:
+        print(json.dumps(validation, indent=2, sort_keys=True)); return
+    if validated.sequence.ground_truth_csv is None:
+        raise SystemExit("PUBLIC_DATASET_SMOKE requires ground truth/mocap for observable label construction")
+
+    raw_dir = args.output / "estimator"
+    if args.dataset == "euroc":
+        run_euroc_sequence(args.root, raw_dir, evaluate=True)
+    else:
+        run_tumvi_sequence(args.root, raw_dir)
+    canonical = build_public_prediction_artifacts(
+        raw_dir, validated.sequence.ground_truth_csv, args.output,
+        dataset=args.dataset, sequence=args.sequence, estimator="internal_eskf",
+        failure_config=args.failure_config,
     )
+    manifest = {**validation, **canonical, "dataset_fingerprint": validated.fingerprint,
+                "artifacts": ["estimator/trajectory.csv", "estimator/health.csv", "failure_events.csv", "prediction_dataset.csv", "canonical_manifest.json"]}
+    (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(manifest, indent=2, sort_keys=True))
 
 
