@@ -1,0 +1,17 @@
+schema_version: 1
+protocol: SHIELD_VIO_PUBLIC_BENCHMARK_V1
+# Clean runs are declared before degradation runs. No results were inspected to
+# choose these sequences; membership comes directly from DATASET_SPLITS.md.
+runs:
+  - {dataset: euroc, sequence: MH_01_easy, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: train}
+  - {dataset: euroc, sequence: MH_02_easy, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: train}
+  - {dataset: euroc, sequence: V1_01_easy, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: train}
+  - {dataset: euroc, sequence: MH_03_medium, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: calibration}
+  - {dataset: euroc, sequence: V1_02_medium, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: calibration}
+  - {dataset: euroc, sequence: V2_01_easy, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: validation}
+  - {dataset: euroc, sequence: V2_02_medium, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: validation}
+  - {dataset: euroc, sequence: MH_04_difficult, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: test}
+  - {dataset: euroc, sequence: MH_05_difficult, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: test}
+  - {dataset: euroc, sequence: V1_03_difficult, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: test}
+  - {dataset: euroc, sequence: V2_03_difficult, estimator: internal_eskf, degradation: clean, severity: none, seed: 0, split: test}
+# TUM-VI rows are added only after the official export inventory/checksums are frozen.
