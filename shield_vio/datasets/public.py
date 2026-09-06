@@ -29,20 +29,21 @@ def discover_public_sequence(dataset: str, root: str | Path) -> DatasetSequence:
     raise ValueError(f"unsupported public dataset: {dataset}")
 
 
-def _validate_timestamp_csv(path: Path, *, minimum_columns: int) -> int:
-    timestamps: list[int] = []
+def _rows(path: Path) -> list[list[str]]:
     with path.open("r", encoding="utf-8", newline="") as stream:
-        reader = csv.reader(line for line in stream if not line.lstrip().startswith("#"))
-        for row in reader:
-            if not row:
-                continue
-            if len(row) < minimum_columns:
-                raise ValueError(f"too few columns in {path}: {row}")
-            try:
-                timestamp = int(row[0].strip())
-            except ValueError as exc:
-                raise ValueError(f"invalid nanosecond timestamp in {path}: {row[0]!r}") from exc
-            timestamps.append(timestamp)
+        return [row for row in csv.reader(line for line in stream if not line.lstrip().startswith("#")) if row]
+
+
+def _validate_timestamp_csv(path: Path, *, minimum_columns: int) -> int:
+    rows = _rows(path)
+    timestamps: list[int] = []
+    for row in rows:
+        if len(row) < minimum_columns:
+            raise ValueError(f"too few columns in {path}: {row}")
+        try:
+            timestamps.append(int(row[0].strip()))
+        except ValueError as exc:
+            raise ValueError(f"invalid nanosecond timestamp in {path}: {row[0]!r}") from exc
     if not timestamps:
         raise ValueError(f"no data rows in {path}")
     if any(right <= left for left, right in zip(timestamps, timestamps[1:])):
@@ -50,9 +51,22 @@ def _validate_timestamp_csv(path: Path, *, minimum_columns: int) -> int:
     return len(timestamps)
 
 
+def _validate_camera_images(camera_csv: Path) -> None:
+    data_dir = camera_csv.parent / "data"
+    for row in _rows(camera_csv):
+        if len(row) < 2:
+            raise ValueError(f"camera row missing image reference: {row}")
+        image = data_dir / row[1].strip()
+        if not image.is_file():
+            raise FileNotFoundError(image)
+
+
 def validate_public_sequence(dataset: str, root: str | Path) -> ValidatedPublicSequence:
     sequence = discover_public_sequence(dataset, root)
+    if len(sequence.calibration_files) < 2:
+        raise FileNotFoundError("camera and IMU calibration sensor.yaml files are required")
     camera_rows = _validate_timestamp_csv(sequence.camera_csv, minimum_columns=2)
+    _validate_camera_images(sequence.camera_csv)
     imu_rows = _validate_timestamp_csv(sequence.imu_csv, minimum_columns=7)
     ground_truth_rows = None
     if sequence.ground_truth_csv is not None:
@@ -63,11 +77,7 @@ def validate_public_sequence(dataset: str, root: str | Path) -> ValidatedPublicS
         metadata_paths.append(sequence.ground_truth_csv)
     fingerprint = dataset_fingerprint(metadata_paths)
     return ValidatedPublicSequence(
-        dataset_name=dataset.strip().lower(),
-        sequence_name=sequence.name,
-        sequence=sequence,
-        camera_rows=camera_rows,
-        imu_rows=imu_rows,
-        ground_truth_rows=ground_truth_rows,
+        dataset_name=dataset.strip().lower(), sequence_name=sequence.name, sequence=sequence,
+        camera_rows=camera_rows, imu_rows=imu_rows, ground_truth_rows=ground_truth_rows,
         fingerprint=fingerprint,
     )
