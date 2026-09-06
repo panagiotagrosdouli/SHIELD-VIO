@@ -22,6 +22,8 @@ class CriterionDefinition:
     name: str
     persistence_seconds: float
     requires_ground_truth: bool
+    comparison: str
+    threshold: float | None = None
 
 
 @dataclass(frozen=True)
@@ -78,11 +80,15 @@ def load_failure_definition(path: str | Path) -> FailureDefinition:
         normalized = name.lower()
         if any(token in normalized for token in PROHIBITED_CRITERION_TOKENS):
             raise ValueError(f"experiment oracle cannot define failure: {name}")
+        comparison = str(settings.get("comparison", "true"))
+        threshold = settings.get("threshold", settings.get("threshold_seconds"))
         criteria.append(
             CriterionDefinition(
                 name=name,
                 persistence_seconds=float(settings.get("persistence_seconds", 0.0)),
                 requires_ground_truth=bool(settings.get("requires_ground_truth", False)),
+                comparison=comparison,
+                threshold=None if threshold is None else float(threshold),
             )
         )
     return FailureDefinition(
@@ -93,6 +99,49 @@ def load_failure_definition(path: str | Path) -> FailureDefinition:
         recovery_confirmation_seconds=float(payload["recovery_confirmation_seconds"]),
         criteria=tuple(criteria),
     )
+
+
+def evaluate_failure_criteria(
+    observations: Mapping[str, np.ndarray],
+    definition: FailureDefinition,
+) -> dict[str, np.ndarray]:
+    """Evaluate only observable criteria declared by the frozen definition.
+
+    Inputs are offline observable quantities (for example aligned trajectory error) or
+    backend event flags. Experiment-oracle fields are rejected by name and undeclared
+    fields are never consumed.
+    """
+
+    declared = {criterion.name for criterion in definition.criteria}
+    forbidden = [
+        name
+        for name in observations
+        if any(token in name.lower() for token in PROHIBITED_CRITERION_TOKENS)
+    ]
+    if forbidden:
+        raise ValueError(f"experiment oracle cannot enter failure criteria: {sorted(forbidden)}")
+    unexpected = set(observations) - declared
+    if unexpected:
+        raise ValueError(f"observations not declared by failure definition: {sorted(unexpected)}")
+    missing = declared - set(observations)
+    if missing:
+        raise ValueError(f"missing declared failure observations: {sorted(missing)}")
+
+    exceeded: dict[str, np.ndarray] = {}
+    for criterion in definition.criteria:
+        values = np.asarray(observations[criterion.name])
+        if values.ndim != 1:
+            raise ValueError(f"failure observation must be one-dimensional: {criterion.name}")
+        if criterion.comparison == "true":
+            exceeded[criterion.name] = values.astype(bool)
+        elif criterion.comparison == "greater_than":
+            if criterion.threshold is None:
+                raise ValueError(f"criterion threshold missing: {criterion.name}")
+            numeric = values.astype(float)
+            exceeded[criterion.name] = np.isfinite(numeric) & (numeric > criterion.threshold)
+        else:
+            raise ValueError(f"unsupported criterion comparison: {criterion.comparison}")
+    return exceeded
 
 
 def build_failure_events_and_targets(
