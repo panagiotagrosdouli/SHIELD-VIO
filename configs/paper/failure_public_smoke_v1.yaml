@@ -1,0 +1,20 @@
+schema_version: SHIELD_VIO_FAILURE_PUBLIC_SMOKE_V1
+kind: sensitivity
+persistence_seconds: 0.5
+event_merge_gap_seconds: 1.0
+recovery_confirmation_seconds: 1.0
+reaction_deadline_seconds: 0.5
+recovery_deadline_seconds: 5.0
+horizons_seconds: [0.5, 1.0, 2.0, 3.0, 5.0]
+criteria:
+  position_error_m:
+    enabled: true
+    threshold: 1.0
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+post_failure_policy: exclude_active_failure
+incomplete_tail_policy: censor
+current_time_in_future_interval: false
+# Infrastructure/smoke only. The primary confirmatory definition remains
+# configs/paper/failure_primary_v1.yaml and must not be replaced by this file.
