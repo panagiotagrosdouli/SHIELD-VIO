@@ -1,0 +1,63 @@
+schema_version: SHIELD_VIO_FAILURE_V1
+kind: primary
+persistence_seconds: 0.5
+event_merge_gap_seconds: 1.0
+recovery_confirmation_seconds: 1.0
+reaction_deadline_seconds: 0.5
+recovery_deadline_seconds: 5.0
+horizons_seconds: [0.5, 1.0, 2.0, 3.0, 5.0]
+criteria:
+  position_error_m:
+    enabled: true
+    threshold: 1.0
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+  orientation_error_deg:
+    enabled: true
+    threshold: 15.0
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+  translation_rpe_1s_m:
+    enabled: true
+    threshold: 0.5
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+  rotation_rpe_1s_deg:
+    enabled: true
+    threshold: 10.0
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+  invalid_pose_or_covariance:
+    enabled: true
+    comparison: true
+    persistence_seconds: 0.0
+    requires_ground_truth: false
+  output_starvation:
+    enabled: true
+    threshold_seconds: 0.5
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: false
+  terminal_tracking_loss:
+    enabled: true
+    comparison: true
+    persistence_seconds: 0.0
+    requires_ground_truth: false
+  visual_update_starvation_while_motion:
+    enabled: true
+    threshold_seconds: 0.5
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: false
+  estimator_reset_or_unrecovered_relocalization:
+    enabled: true
+    comparison: true
+    persistence_seconds: 0.0
+    requires_ground_truth: false
+post_failure_policy: exclude_active_failure
+incomplete_tail_policy: censor
+current_time_in_future_interval: false
