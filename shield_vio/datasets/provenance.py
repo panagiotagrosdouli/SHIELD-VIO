@@ -6,6 +6,7 @@ import json
 import platform
 import sys
 from dataclasses import asdict, dataclass
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Iterable
 
@@ -41,17 +42,17 @@ def dataset_fingerprint(paths: Iterable[str | Path]) -> dict[str, object]:
             raise FileNotFoundError(path)
         entries.append({"path": path.as_posix(), "sha256": sha256_file(path)})
     canonical = json.dumps(entries, sort_keys=True, separators=(",", ":"))
-    return {
-        "algorithm": "sha256",
-        "scope": "listed local metadata/index files; not an official dataset archive checksum",
-        "files": entries,
-        "fingerprint": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-    }
+    return {"algorithm": "sha256", "scope": "listed local metadata/index files; not an official dataset archive checksum", "files": entries, "fingerprint": hashlib.sha256(canonical.encode("utf-8")).hexdigest()}
 
 
-def environment_provenance() -> dict[str, str]:
+def environment_provenance() -> dict[str, object]:
+    packages: dict[str, str] = {}
+    for name in ("numpy", "matplotlib", "PyYAML", "Pillow", "opencv-python-headless"):
+        try:
+            packages[name] = version(name)
+        except PackageNotFoundError:
+            packages[name] = "NOT_INSTALLED"
     return {
-        "python": sys.version.split()[0],
-        "platform": platform.platform(),
-        "implementation": platform.python_implementation(),
+        "python": sys.version.split()[0], "platform": platform.platform(),
+        "implementation": platform.python_implementation(), "packages": packages,
     }
