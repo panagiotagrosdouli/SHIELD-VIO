@@ -1,0 +1,21 @@
+schema_version: 1
+protocol: SHIELD_VIO_PUBLIC_SPLITS_V1
+train:
+  - {dataset: euroc, sequence: MH_01_easy}
+  - {dataset: euroc, sequence: MH_02_easy}
+  - {dataset: euroc, sequence: V1_01_easy}
+calibration:
+  - {dataset: euroc, sequence: MH_03_medium}
+  - {dataset: euroc, sequence: V1_02_medium}
+validation:
+  - {dataset: euroc, sequence: V2_01_easy}
+  - {dataset: euroc, sequence: V2_02_medium}
+test:
+  - {dataset: euroc, sequence: MH_04_difficult}
+  - {dataset: euroc, sequence: MH_05_difficult}
+  - {dataset: euroc, sequence: V1_03_difficult}
+  - {dataset: euroc, sequence: V2_03_difficult}
+shifted_test: []
+# TUM-VI is intentionally absent until the official exported-sequence inventory,
+# ground-truth intervals, and checksum identities are frozen as required by
+# DATASET_SPLITS.md. Do not guess sequence filenames or call this confirmatory.
