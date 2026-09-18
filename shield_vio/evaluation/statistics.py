@@ -109,8 +109,13 @@ def paired_grouped_bootstrap(
         raise ValueError("at least one paired experimental unit is required")
 
     keys = sorted(common, key=repr)
-    a = np.asarray([method_a[key] for key in keys], dtype=float)
-    b = np.asarray([method_b[key] for key in keys], dtype=float)
+    try:
+        a = np.asarray([method_a[key] for key in keys], dtype=float)
+        b = np.asarray([method_b[key] for key in keys], dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("each experimental unit must map to one scalar metric value") from exc
+    if a.ndim != 1 or b.ndim != 1:
+        raise ValueError("each experimental unit must map to one scalar metric value")
     finite = np.isfinite(a) & np.isfinite(b)
     invalid_count = int(np.sum(~finite))
     if invalid_count and missing == "raise":
