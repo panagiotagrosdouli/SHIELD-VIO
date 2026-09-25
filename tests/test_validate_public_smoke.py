@@ -56,6 +56,7 @@ def _bundle(root: Path) -> Path:
         metrics[method] = {
             "auroc": 0.75,
             "auprc": 0.8,
+            "discrimination_defined": True,
             "eligible_samples": 2,
             "positive_windows": 1,
             "negative_windows": 1,
@@ -99,6 +100,8 @@ def _bundle(root: Path) -> Path:
             "negative_windows": 1,
             "failure_events": 1,
         },
+        "discrimination_defined": True,
+        "target_status": "TWO_CLASS",
         "artifact_sha256": hashes,
         "estimator_manifest": str(estimator / "experiment_manifest.json"),
         "git": {"commit_sha": "0123456789abcdef", "dirty_tree": False},
@@ -144,3 +147,42 @@ def test_validate_public_smoke_rejects_artifact_tampering(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="artifact hash mismatch"):
         validate_smoke(output, expected_sequence="MH_01_easy")
+
+
+def test_validate_public_smoke_accepts_single_class_negative_pipeline_evidence(
+    tmp_path: Path,
+) -> None:
+    output = _bundle(tmp_path)
+    _write_csv(
+        output / "predictions.csv",
+        ["timestamp_ns", "future_failure", "eligible"],
+        [[100, 0, 1], [200, 0, 1]],
+    )
+    metrics_path = output / "metrics.json"
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    for payload in metrics.values():
+        payload["auroc"] = None
+        payload["auprc"] = None
+        payload["discrimination_defined"] = False
+        payload["positive_windows"] = 0
+        payload["negative_windows"] = 2
+    metrics_path.write_text(json.dumps(metrics) + "\n", encoding="utf-8")
+
+    manifest_path = output / "experiment_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sample_counts"]["positive_windows"] = 0
+    manifest["sample_counts"]["negative_windows"] = 2
+    manifest["sample_counts"]["failure_events"] = 0
+    manifest["discrimination_defined"] = False
+    manifest["target_status"] = "SINGLE_CLASS_NEGATIVE"
+    manifest["artifact_sha256"]["predictions.csv"] = _sha256_file(
+        output / "predictions.csv"
+    )
+    manifest["artifact_sha256"]["metrics.json"] = _sha256_file(metrics_path)
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    report = validate_smoke(output, expected_sequence="MH_01_easy")
+    assert report["status"] == "pass"
+    assert report["target_status"] == "SINGLE_CLASS_NEGATIVE"
+    assert not report["discrimination_defined"]
+    assert report["failure_events"] == 0
