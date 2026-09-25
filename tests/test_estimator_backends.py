@@ -44,6 +44,12 @@ def test_eskf_backend_propagates_imu_and_returns_copied_state() -> None:
     assert health.tracking_status == "tracking"
     assert health.propagated_imu_samples == 1
     assert health.covariance_trace > 0.0
+    assert health.covariance_min_eigenvalue is not None
+    assert health.covariance_min_eigenvalue > 0.0
+    assert health.covariance_symmetry_error == pytest.approx(0.0, abs=1e-12)
+    assert health.terminal_tracking_loss_observable is False
+    assert health.reset_event is False
+    assert health.relocalization_event is False
     assert health.innovation_nis is None
 
 
