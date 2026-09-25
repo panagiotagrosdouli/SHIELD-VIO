@@ -11,6 +11,7 @@ on:
       - 'scripts/convert_euroc_rosbag.py'
       - 'scripts/export_primary_observables.py'
       - 'scripts/export_primary_failure_targets.py'
+      - 'scripts/build_public_v2_canonical.py'
       - 'tests/test_validate_public_smoke.py'
       - 'tests/test_primary_observables.py'
       - 'tests/test_convert_euroc_rosbag.py'
@@ -28,6 +29,7 @@ on:
       - 'scripts/convert_euroc_rosbag.py'
       - 'scripts/export_primary_observables.py'
       - 'scripts/export_primary_failure_targets.py'
+      - 'scripts/build_public_v2_canonical.py'
       - 'pyproject.toml'
       - '.github/workflows/real-euroc-paired.yml'
 
@@ -209,6 +211,20 @@ jobs:
             --failure-config configs/paper/failure_primary_v2.yaml \
             --evidence-level PUBLIC_DATASET_SMOKE
           cat results/real_euroc/MH_01_easy/primary_failure_targets/primary_failure_manifest.json
+
+      - name: Build canonical V2 train artifact
+        run: |
+          python scripts/build_public_v2_canonical.py \
+            --run-dir results/real_euroc/MH_01_easy/opencv_rotation \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/canonical_v2 \
+            --dataset euroc \
+            --sequence MH_01_easy \
+            --estimator internal_eskf \
+            --split train \
+            --split-config configs/paper/public_dataset_splits.yaml \
+            --failure-config configs/paper/failure_primary_v2.yaml
+          cat results/real_euroc/MH_01_easy/canonical_v2/canonical_manifest.json
 
       - name: Build paired comparison
         run: |
