@@ -17,36 +17,67 @@ This matrix links planned manuscript claims to representative prior work and ide
 | Selective prediction / abstention | \cite{geifman2019selectivenet} | Risk-coverage trade-offs provide an abstention framework | Does abstention or conservative mode improve declared mission utility rather than merely reduce exposure by stopping? | Closed-loop comparison required |
 | Runtime assurance | \cite{seto1998simplex,hsu2024safetyfilter} | Runtime monitoring/intervention can separate performance and protection layers | Is SHIELD-VIO appropriately framed as empirical supervisory protection rather than formal safety assurance? | Claim-language requirement |
 
-
 ## Closest-prior-art conclusion
 
-The current search rules out several broad novelty claims:
+The closest prior art materially narrows the novelty boundary.
 
-- **Do not claim:** “first to predict localization failure.” Time-to-failure and predictive localization monitoring already exist for scan-matching/particle-filter localization \cite{tsuchiya2020ttf,eder2022localizationmonitor,knitt2025predictivemonitoring}.
-- **Do not claim:** “first VIO health monitor” or “first to switch when VIO fails.” VIO integrity monitoring and health-triggered estimator switching already exist \cite{wang2019pdrviointegrity,joshi2023smvio}.
-- **Do not claim:** “first to avoid SLAM tracking failure using introspection.” Introspective-SLAM explicitly evaluates future navigation steps and plans around tracking failure \cite{naveed2022introspectiveslam}.
-- **Do not claim:** “first failure-centric VIO benchmark.” A 2026 benchmark now stress-tests multiple VIO paradigms under degradation/miscalibration/occlusion \cite{zhu2026failurebenchmark}.
-- **Do not claim:** “first calibrated or conformal SLAM under domain shift.” Calibration/conformal mechanisms are already being applied inside SLAM \cite{chen2026cf2slam}.
+### What is already established
 
-### Candidate defensible contribution
+- **Generic localization-failure prediction is not new.** Time-to-failure and predictive monitoring have been studied for scan-matching and particle-filter localization \cite{tsuchiya2020ttf,eder2022localizationmonitor,knitt2025predictivemonitoring}.
+- **VIO integrity monitoring and fallback switching are not new.** Existing work monitors VIO integrity and can switch to a fallback estimator when health degrades \cite{wang2019pdrviointegrity,joshi2023smvio}.
+- **Future tracking-failure avoidance in visual SLAM is not new.** Introspective-SLAM predicts the safety of candidate future navigation steps and replans to avoid tracking failure \cite{naveed2022introspectiveslam}.
+- **Failure-centric VIO stress testing is not new.** Recent benchmarking evaluates multiple VIO systems under degradation, miscalibration and occlusion \cite{zhu2026failurebenchmark}.
+- **Uncertainty-aware VIO robustness is not new.** Online statistical measurement-reliability learning has been proposed to adapt visual measurement weights \cite{choi2025statistical}.
+- **Short-horizon VIO risk prediction plus stop/relocalization is now direct prior art.** SUPER combines propagated uncertainty, residuals, geometric conditioning and temporal trends, predicts near-future trajectory degradation, and uses the risk signal for stop/relocalization \cite{gaus2025super}.
+- **Calibration/conformal mechanisms inside SLAM under domain variation are not new in the broad sense.** Recent work applies conformal calibration to SLAM factor weighting \cite{chen2026cf2slam}.
 
-Subject to completion of the remaining literature search and the experiments, the strongest candidate contribution is:
+Therefore SHIELD-VIO must not claim novelty merely for a VIO health score, short-horizon degradation prediction, risk monitoring, degradation benchmarking, or a stop/relocalization reaction.
 
-> **A leakage-resistant, estimator-facing framework that formulates VIO degradation as calibrated prediction of persistent future localization-failure events from causal multi-signal health history, explicitly evaluates warning lead time and probability reliability under domain shift, and couples the predicted risk to stateful protective navigation actions under a common public-dataset/closed-loop protocol.**
+### Strongest remaining differentiation to test
 
-The likely differentiator is therefore the **combination and evaluation contract**: VIO-specific causal health signals + fixed future horizons + persistent event labels + held-out probability calibration + domain-shift evaluation + protective-policy consequences + run-level paired inference. Each individual ingredient has prior art.
+The current literature audit has not identified one work that demonstrates the following **joint protocol**:
 
-A stronger paper can additionally test whether this framework transfers from the internal ESKF to an established estimator such as OpenVINS. If successful, an architecture-general claim can be made narrowly over the executed estimators; without that experiment, the paper should remain VIO-backend-specific.
+1. define **persistent failure-onset events** and causal future targets at several fixed horizons (e.g. 0.5/1/2/3/5 s), with censoring and explicit recovery/event semantics;
+2. predict those events from a **backend-neutral multi-signal health history** spanning covariance, innovations/NIS, visual tracking/update diagnostics, inertial/estimator health, temporal derivatives and explicit missingness;
+3. fit detector, probability calibrator, operating threshold and final test on **disjoint complete-sequence train/calibration/validation/test partitions**, with an explicit leakage firewall;
+4. report **held-out probability reliability** (Brier/NLL/ECE, calibration slope/intercept and reliability data), rather than treating a heuristic risk score as a calibrated probability;
+5. evaluate how discrimination, calibration/coverage and confidence change under **predeclared unseen degradation family/severity and cross-dataset shift**;
+6. feed the same prediction outputs into **stateful protective-policy variants** and report downstream safety--utility outcomes (unsafe exposure, mission completion, intervention cost/delay, recovery), not only detector recall/FPR;
+7. perform inference over complete sequence-condition-seed experimental units with **paired grouped uncertainty**, never treating adjacent frames as independent replicates.
 
-## Literature gaps that must still be searched before freezing novelty
+This combination is the candidate SHIELD-VIO contribution. Every element must be demonstrated experimentally before it appears as a supported contribution in the manuscript.
 
-1. VIO-specific **future** failure forecasting from estimator internals, not only current confidence or failure detection.
-2. Innovation/NIS/covariance consistency monitoring used explicitly as a learned or thresholded precursor to localization failure.
-3. Failure detection and recovery in visual-inertial SLAM, especially systems that trigger relocalization/reinitialization or navigation changes.
-4. Localization integrity/risk estimation for autonomous navigation beyond visual place recognition.
-5. Robotics work combining calibrated uncertainty with runtime policy switching under localization degradation.
-6. Recent 2024--2026 papers on uncertainty-aware VIO/SLAM, failure prediction, and safety-aware localization.
+### Relationship to SUPER
+
+SUPER is the strongest direct comparator and should be discussed explicitly, not hidden in a broad related-work paragraph. It already predicts trajectory degradation 50 frames ahead and demonstrates a stop/relocalization policy \cite{gaus2025super}. The SHIELD-VIO paper should therefore test a different question:
+
+> **Given causal estimator health up to time t, what is the held-out calibrated probability that a persistent observable localization-failure event will begin within a specified horizon, how reliable is that probability under domain shift, and what is the paired downstream utility of acting on it?**
+
+The intended distinction is not “risk versus no risk.” It is **event semantics + split-safe probability calibration + shift evaluation + decision utility**.
+
+### Candidate contribution wording
+
+Subject to a final exhaustive search and successful experiments:
+
+> **SHIELD-VIO presents a leakage-resistant evaluation and protection framework for visual--inertial localization that casts degradation as multi-horizon prediction of persistent future failure events from causal estimator-health histories, calibrates the resulting risks on disjoint sequence-level data, evaluates reliability under predeclared distribution shifts, and measures how stateful risk-triggered actions affect downstream safety--utility outcomes.**
+
+Avoid “first” in the abstract until the literature search is frozen. A defensible phrasing is “we are not aware of prior work that jointly evaluates…” followed by the exact combination above.
+
+### What would make the novelty substantially stronger
+
+- Execute the same health/prediction contract on the internal ESKF **and at least one mature external estimator** such as OpenVINS.
+- Include SUPER or a faithful SUPER-style sensitivity/risk baseline where implementation access permits.
+- Compare a simple reactive health threshold, a SUPER-like short-horizon risk score, raw learned risk, calibrated risk, and calibrated+stateful protection on identical run units.
+- Preserve full train/calibration/validation/test separation and publish the run-level source tables and paired bootstrap intervals.
+
+## Literature gaps that still require search before novelty freeze
+
+1. Papers that explicitly calibrate probabilities of **future VIO failure onset**, rather than uncertainty of pose/measurements.
+2. Multi-horizon survival/hazard/event forecasting specifically for VIO/SLAM.
+3. Work combining localization-risk calibration with domain-shift detection and policy switching.
+4. Closed-loop localization-failure prediction papers reporting both safety and mission-utility endpoints.
+5. 2025--2026 papers that may cite or extend SUPER, SM/VIO, introspective SLAM, or localization-integrity monitoring.
 
 ## Novelty freeze rule
 
-No “first” or broad novelty statement is accepted until every gap above has been searched with explicit inclusion/exclusion notes. The final contribution statement should name the exact combination that remains unsupported by prior work and should be restricted to the datasets, estimators, horizons, degradations, and protective policies actually evaluated.
+No “first,” “novel,” or broad priority statement is accepted until the remaining searches above are documented with explicit inclusion/exclusion notes. The final contribution statement must be restricted to the datasets, estimators, horizons, degradations and policy variants actually executed.
