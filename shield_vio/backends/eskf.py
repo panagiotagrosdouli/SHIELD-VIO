@@ -92,6 +92,7 @@ class ESKFBackend:
     def health(self) -> EstimatorHealth:
         timestamp_ns = self._require_initialized()
         covariance = self._state.covariance
+        symmetric_covariance = 0.5 * (covariance + covariance.T)
         innovation = self._filter.last_innovation
         return EstimatorHealth(
             timestamp_ns=timestamp_ns,
@@ -101,6 +102,10 @@ class ESKFBackend:
             covariance_trace=float(np.trace(covariance)),
             covariance_condition_number=float(np.linalg.cond(covariance)),
             innovation_nis=None if innovation is None else float(innovation.nis),
+            covariance_min_eigenvalue=float(np.min(np.linalg.eigvalsh(symmetric_covariance))),
+            covariance_symmetry_error=float(np.max(np.abs(covariance - covariance.T))),
+            reset_event=False,
+            relocalization_event=False,
         )
 
     def _require_initialized(self) -> int:
