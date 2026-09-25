@@ -523,7 +523,7 @@ def write_primary_observable_artifacts(
         writer = csv.writer(stream)
         columns = ["timestamp_ns"]
         for name in PRIMARY_CRITERIA:
-            columns.extend([name, f"{name}__observable"])
+            columns.extend([name, f"{name}__observable", f"{name}__applicable"])
         writer.writerow(columns)
         for index, timestamp in enumerate(table.timestamps_ns):
             row: list[object] = [int(timestamp)]
@@ -534,32 +534,49 @@ def write_primary_observable_artifacts(
                 else:
                     numeric = float(value)
                     serialized = "" if not np.isfinite(numeric) else numeric
-                row.extend([serialized, int(table.observable[name][index])])
+                row.extend(
+                    [
+                        serialized,
+                        int(table.observable[name][index]),
+                        int(table.applicable[name][index]),
+                    ]
+                )
             writer.writerow(row)
 
     criteria: dict[str, Any] = {}
     blocking: list[str] = []
     for name in PRIMARY_CRITERIA:
-        mask = np.asarray(table.observable[name], dtype=bool)
-        count = int(np.sum(mask))
-        if count == 0:
+        observable = np.asarray(table.observable[name], dtype=bool)
+        applicable = np.asarray(table.applicable[name], dtype=bool)
+        applicable_count = int(np.sum(applicable))
+        observable_count = int(np.sum(observable & applicable))
+        if applicable_count == 0:
+            status = "NOT_APPLICABLE"
+        elif observable_count == 0:
+            status = "NOT_OBSERVABLE"
             blocking.append(name)
+        else:
+            status = "OBSERVABLE"
         criteria[name] = {
-            "observable_samples": count,
-            "total_samples": len(mask),
-            "observable_fraction": count / len(mask),
+            "observable_samples": observable_count,
+            "applicable_samples": applicable_count,
+            "total_samples": len(observable),
+            "observable_fraction_of_applicable": (
+                observable_count / applicable_count if applicable_count else None
+            ),
             "source": table.sources[name],
-            "status": "NOT_OBSERVABLE" if count == 0 else "OBSERVABLE",
+            "status": status,
         }
     report = {
-        "schema_version": "SHIELD_VIO_PRIMARY_OBSERVABLE_AUDIT_V1",
+        "schema_version": "SHIELD_VIO_PRIMARY_OBSERVABLE_AUDIT_V2",
         "status": "BLOCKED" if blocking else "READY_FOR_PRIMARY_LABEL_BUILD",
         "sample_count": len(table.timestamps_ns),
         "criteria": criteria,
         "blocking_criteria": blocking,
         "claim_boundary": (
-            "Availability audit only. Primary SHIELD_VIO_FAILURE_V1 events must not be built "
-            "until every enabled criterion has a frozen observable implementation."
+            "Availability audit only. Primary SHIELD_VIO_FAILURE_V2 events may be built only "
+            "when every enabled criterion is observable where applicable or is explicitly "
+            "NOT_APPLICABLE under the frozen backend-capability policy."
         ),
     }
     (destination / "primary_observable_audit.json").write_text(
