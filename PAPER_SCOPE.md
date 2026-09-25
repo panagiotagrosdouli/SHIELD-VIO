@@ -4,15 +4,15 @@
 
 **Working title:** *SHIELD-VIO: Calibrated Early Failure Prediction and Protective Control for Visual–Inertial Odometry under Sensor Degradation and Domain Shift*
 
-**Central research question:** Can an estimator-aware, calibrated failure-prediction layer detect visual–inertial localization failure early enough to improve downstream navigation safety under sensor degradation and domain shift?
+**Central research question:** Given causal estimator health up to time t, can SHIELD-VIO estimate the held-out probability that a persistent visual–inertial localization failure will begin within a specified future horizon, remain reliable under predeclared domain shifts, and improve downstream safety–utility outcomes when acted upon?
 
-SHIELD-VIO is an estimator-introspection and navigation-protection framework. It is not presented as a new state-of-the-art VIO estimator. The internal ESKF is an experimental backend used for controlled integration and debugging; established VIO backends are required before making estimator-agnostic claims.
+SHIELD-VIO is an estimator-introspection and navigation-protection framework. The publication-facing experiment matrix is frozen in `docs/publication/EXPERIMENTAL_DESIGN_V1.md` and `configs/paper/confirmatory_experiment_v1.yaml`. It is not presented as a new state-of-the-art VIO estimator. The internal ESKF is an experimental backend used for controlled integration and debugging; established VIO backends are required before making estimator-agnostic claims.
 
 ## Primary claim
 
 The confirmatory paper will test one coherent claim:
 
-> A causal, multi-signal health representation combining visual, inertial, innovation, covariance, consistency, missingness, and temporal diagnostics predicts impending VIO failure earlier and more reliably than predeclared single-signal heuristics; held-out calibration and explicit shift handling make those predictions more useful to a stateful protective navigation policy.
+> A causal, multi-signal health representation predicts persistent future VIO failure events under a frozen multi-horizon protocol; sequence-disjoint probability calibration and explicit shift evaluation characterize the reliability of that risk, and stateful protective actions are tested for downstream safety–utility benefit against both conventional reactive health thresholds and a closest-prior-art short-horizon risk comparator.
 
 The claim is represented by one causal chain:
 

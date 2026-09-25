@@ -178,3 +178,38 @@ def test_vertical_slice_writes_complete_nonconfirmatory_artifacts(tmp_path: Path
         "logistic_platt",
     } <= set(metrics)
     assert 0.0 <= metrics["logistic_platt"]["auprc"] <= 1.0
+
+
+def test_vertical_slice_retains_single_class_negative_smoke_without_discrimination(
+    tmp_path: Path,
+) -> None:
+    run_dir, sequence = _fixture_run(tmp_path)
+    output = tmp_path / "single_class_output"
+    manifest = run_public_dataset_smoke(
+        run_dir,
+        sequence,
+        output,
+        config=VerticalSliceConfig(
+            horizon_seconds=1.0,
+            position_error_threshold_m=100.0,
+            persistence_seconds=0.5,
+            max_ground_truth_gap_seconds=0.6,
+            synthetic_train_samples=200,
+            synthetic_calibration_samples=100,
+            synthetic_validation_samples=100,
+        ),
+        command="fixture single-class vertical slice",
+    )
+
+    assert manifest["status"] == "complete"
+    assert manifest["target_status"] == "SINGLE_CLASS_NEGATIVE"
+    assert manifest["discrimination_defined"] is False
+    assert manifest["sample_counts"]["failure_events"] == 0
+    assert manifest["sample_counts"]["positive_windows"] == 0
+    assert manifest["sample_counts"]["negative_windows"] == manifest["sample_counts"]["eligible"]
+
+    metrics = json.loads((output / "metrics.json").read_text(encoding="utf-8"))
+    for payload in metrics.values():
+        assert payload["discrimination_defined"] is False
+        assert payload["auroc"] is None
+        assert payload["auprc"] is None

@@ -191,11 +191,6 @@ def run_public_dataset_smoke(
 
     eligible = dataset.targets.eligible_mask
     labels = dataset.targets.labels
-    if len(np.unique(labels[eligible])) != 2:
-        raise ValueError(
-            "public smoke test requires both future-failure classes; choose a sequence/threshold "
-            "with at least one observable event and eligible nominal monitoring interval"
-        )
 
     method_metrics: dict[str, dict[str, Any]] = {}
     for method, method_scores in scores.items():
@@ -291,10 +286,15 @@ def _method_metrics(
         dataset.events,
         warning_horizon_seconds=dataset.targets.horizon_seconds,
     )
+    eligible_labels = labels[eligible]
+    discrimination_defined = bool(
+        np.any(eligible_labels) and np.any(~eligible_labels)
+    )
     return {
-        "auroc": auroc(labels[eligible], scores[eligible]),
-        "auprc": auprc(labels[eligible], scores[eligible]),
-        "frame": binary_metrics(labels[eligible], predictions[eligible]),
+        "auroc": auroc(eligible_labels, scores[eligible]) if discrimination_defined else None,
+        "auprc": auprc(eligible_labels, scores[eligible]) if discrimination_defined else None,
+        "discrimination_defined": discrimination_defined,
+        "frame": binary_metrics(eligible_labels, predictions[eligible]),
         "event": asdict(event_summary),
         "eligible_samples": int(np.sum(eligible)),
         "positive_windows": int(np.sum(labels[eligible])),
@@ -666,6 +666,22 @@ def _manifest(
             "negative_windows": int(np.sum(~dataset.targets.labels[dataset.targets.eligible_mask])),
             "failure_events": len(dataset.events.onsets_ns),
         },
+        "discrimination_defined": bool(
+            np.any(dataset.targets.labels[dataset.targets.eligible_mask])
+            and np.any(~dataset.targets.labels[dataset.targets.eligible_mask])
+        ),
+        "target_status": (
+            "TWO_CLASS"
+            if (
+                np.any(dataset.targets.labels[dataset.targets.eligible_mask])
+                and np.any(~dataset.targets.labels[dataset.targets.eligible_mask])
+            )
+            else (
+                "SINGLE_CLASS_POSITIVE"
+                if np.any(dataset.targets.labels[dataset.targets.eligible_mask])
+                else "SINGLE_CLASS_NEGATIVE"
+            )
+        ),
         "artifact_sha256": {name: _sha256_files([destination / name]) for name in artifacts},
         "status": "complete",
     }

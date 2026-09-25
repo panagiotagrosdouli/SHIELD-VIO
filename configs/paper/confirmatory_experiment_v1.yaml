@@ -1,0 +1,149 @@
+schema_version: 1
+protocol: SHIELD_VIO_CONFIRMATORY_EXPERIMENT_V1
+
+references:
+  experimental_design: docs/publication/EXPERIMENTAL_DESIGN_V1.md
+  split_registry: configs/paper/public_dataset_splits.yaml
+  public_run_registry: configs/paper/public_benchmark.yaml
+  primary_failure_definition: configs/paper/failure_primary_v1.yaml
+
+experimental_unit:
+  fields: [dataset, sequence, estimator, degradation_condition, seed]
+  frames_are_replicates: false
+  horizons_are_repeated_analysis_dimensions: true
+
+horizons_s: [0.5, 1.0, 2.0, 3.0, 5.0]
+
+operating_point:
+  selected_on: validation
+  max_false_alarms_per_minute: 0.2
+  objective: minimize_missed_events
+  tie_breaker: earlier_median_lead_time
+
+estimators:
+  required:
+    - internal_eskf
+  target_external:
+    - openvins
+  cross_estimator_claim_requires_external_execution: true
+
+predictors:
+  heuristic:
+    - H-COV-TRACE
+    - H-COV-EIG
+    - H-NIS
+    - H-NORM-INNOV
+    - H-FEATURE
+    - H-TRACK
+    - H-MA
+  learned:
+    - P-LOG
+    - P-GBT
+    - P-PROPOSED
+  closest_prior_art:
+    preferred: P-SUPER
+    fallback: P-SUPER-STYLE
+    fallback_must_be_labeled_reproduction: true
+
+calibration:
+  primary: C-PLATT
+  secondary:
+    - C-RAW
+    - C-ISO
+    - C-TEMP
+    - C-CONF
+  fit_split: calibration
+
+primary_contrasts:
+  future_warning:
+    method_a: P-PROPOSED
+    method_b:
+      - strongest_validation_selected_single_signal
+      - closest_prior_art
+      - P-LOG
+      - P-GBT
+    metrics:
+      - auprc
+      - event_recall
+      - median_lead_time_s
+      - false_alarms_per_minute
+    matched_false_alarm_budget: true
+
+  multi_signal:
+    method_a: P-PROPOSED
+    method_b: strongest_validation_selected_single_family
+    primary_metric: auprc
+
+  calibration:
+    method_a: calibrated_P-PROPOSED
+    method_b: raw_P-PROPOSED
+    primary_metric: brier
+    secondary_metrics: [nll, ece, mce, calibration_slope, calibration_intercept]
+
+  protection:
+    policies:
+      - A-NONE
+      - A-COV
+      - A-RISK
+      - A-RAW
+      - A-CAL
+      - A-HYST
+      - A-FULL
+    primary_view:
+      x: mission_completion
+      y: unsafe_localization_exposure
+
+shift_evaluation:
+  conditions:
+    - unseen_degradation_family
+    - unseen_severity
+    - cross_dataset
+    - estimator_shift
+  metrics:
+    - auprc_change
+    - brier_change
+    - false_negative_rate_change
+    - confidence_under_error
+    - conformal_coverage
+    - shift_detection_delay
+
+ablation_subset:
+  - current_only
+  - visual_only
+  - imu_only
+  - consistency_only
+  - covariance_only
+  - visual_plus_consistency
+  - visual_plus_inertial
+  - leave_one_family_out
+  - reduced_black_box_signals
+
+inference:
+  method: paired_grouped_bootstrap
+  confidence_level: 0.95
+  resampling_unit: complete_run_key
+  reject_unpaired_confirmatory_runs: true
+  frame_level_primary_inference_forbidden: true
+  exploratory_multiple_testing: holm
+
+minimum_confirmatory_evidence:
+  public_datasets: 2
+  independent_test_sequence_degradation_units: 20
+  require_real_euroc_execution: true
+  require_real_tumvi_execution: true
+  require_stored_predictions: true
+  require_stored_labels: true
+  require_run_metrics: true
+  require_manifests_and_hashes: true
+
+claim_gates:
+  estimator_generalization:
+    requires: [internal_eskf, openvins]
+  calibrated_probability:
+    requires_disjoint_calibration_split: true
+  domain_shift_handling:
+    requires_held_out_shift_evaluation: true
+  protective_utility:
+    requires_closed_loop_paired_policy_results: true
+  formal_safety:
+    permitted: false

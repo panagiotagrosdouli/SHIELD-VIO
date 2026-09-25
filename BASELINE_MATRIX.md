@@ -31,6 +31,8 @@ The trajectory-error oracle is non-deployable and is excluded from rankings, sig
 | P-GRU/TCN | GRU or temporal convolution | Explicit temporal baseline | Window, hidden size, dropout | Missing; secondary unless materially beneficial |
 | P-ONECLASS | One-class anomaly detector | Failure-scarce baseline | Contamination/nu, kernel | Missing |
 | P-MAHA | Gaussian/Mahalanobis health distance | Interpretable distribution baseline | Covariance shrinkage, window | Rolling shift code provides a related unit-tested primitive |
+| P-SUPER | Official SUPER execution when compatible source/configuration is available | Closest VIO short-horizon risk comparator | Use authors' executable configuration where possible; no SHIELD-specific retuning on test | External implementation/integration required |
+| P-SUPER-STYLE | Clearly labeled reproduction of the publicly specified SUPER-style risk inputs/logic | Fallback closest-prior-art comparator when official execution is unavailable | Uncertainty, residual magnitude, geometric conditioning when available, temporal trend; validation-only tuning | Missing; must never be presented as the original SUPER implementation |
 | P-PROPOSED | Interpretable multi-signal temporal detector | Primary method | Frozen feature families and compact model class | Health signals exist separately; unified causal representation missing |
 
 The primary proposed detector should remain interpretable and computationally realistic. A large neural architecture is out of scope unless it yields a material, paired improvement over the compact baselines and its calibration/runtime costs are reported.
@@ -72,6 +74,7 @@ Shift detection and shift response are evaluated separately. A detector with goo
 |---|---|---|---|---|
 | A-NONE | No shield | None | Safety/utility reference | Can be represented by normal navigation |
 | A-COV | Covariance threshold | Optional dwell | Conventional estimator confidence | Missing paired simulator orchestration |
+| A-RISK | SUPER/SUPER-style short-horizon risk threshold | As defined by comparator | Closest-prior-art risk-to-action reference | Missing paired simulator orchestration |
 | A-RAW | Raw detector threshold | None | Effect of discrimination without calibration | Missing paired simulator orchestration |
 | A-CAL | Calibrated threshold | None | Effect of calibration alone | Missing calibrator and orchestration |
 | A-HYST | Calibrated + hysteresis | Dwell/release | Effect of statefulness | Core stateful logic partly implemented |
@@ -104,3 +107,10 @@ The first public-data smoke slice implements and executes:
 5. Platt calibration fitted on a held-out partition;
 6. an explicit `PUBLIC_DATASET_SMOKE` manifest that prevents these results from being interpreted as confirmatory evidence.
 
+
+
+## Closest-prior-art comparison rule
+
+SUPER is treated as a direct scientific comparator rather than only a citation. Prefer the official implementation and published configuration when executable and compatible. If that is not possible, the repository may implement a narrowly scoped SUPER-style comparator from publicly specified signals and equations, but all artifacts, tables, and prose must label it as a reproduction rather than as SUPER itself.
+
+The main SHIELD-VIO claim is not that short-horizon VIO risk assessment is new. The confirmatory comparison asks whether persistent-event targets, sequence-disjoint probability calibration, shift-aware reliability evaluation, and stateful downstream policy analysis add measurable value under the same run-level protocol.

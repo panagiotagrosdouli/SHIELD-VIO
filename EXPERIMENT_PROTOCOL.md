@@ -1,5 +1,7 @@
 # Confirmatory Experiment Protocol
 
+The publication-facing comparison matrix and execution order are specified in `docs/publication/EXPERIMENTAL_DESIGN_V1.md`. This protocol remains the authoritative split, inference, and evidence-boundary contract.
+
 ## Scope and preregistration status
 
 This protocol evaluates the frozen claim in `PAPER_SCOPE.md`. It is prospective: test-set outcomes must not be inspected until dataset registries, failure definitions, feature schema, methods, calibration choices, thresholds, cost settings, and analysis code are versioned and the leakage suite passes.
@@ -43,9 +45,9 @@ Common controls across methods:
 
 ## H1: Early detection
 
-**Methods:** covariance trace, largest covariance eigenvalue, feature count, track survival, NIS, tracking-state rule, moving-average rule, logistic regression, tree detector, proposed multi-signal detector.
+**Methods:** covariance trace, largest covariance eigenvalue, feature count, track survival, NIS, tracking-state rule, moving-average rule, logistic regression, tree detector, official SUPER when executable or an explicitly labeled SUPER-style reproduction, and the proposed multi-signal detector.
 
-**Primary analysis:** event-level median lead time for timely detected failures at the validation-selected operating point constrained to at most 0.2 false alarms/min. Event recall and the achieved false-alarm rate are reported beside lead time to prevent selective reporting among easy detections.
+**Primary analysis:** event-level median lead time for timely detected failures at the validation-selected operating point constrained to at most 0.2 false alarms/min. Event recall, AUPRC, and the achieved false-alarm rate are reported beside lead time to prevent selective reporting among easy detections. The main method is compared both with the strongest deployable single-signal baseline and with the closest-prior-art SUPER/SUPER-style risk comparator at a matched false-alarm budget.
 
 **Secondary analyses:** AUROC, AUPRC, precision, recall, F1, missed-event rate, time-to-failure curves, precision at predeclared recall, and frame-level counts. The trajectory-error oracle is shown only as a non-deployable upper bound.
 
@@ -83,14 +85,15 @@ Replay identical estimator outputs and detector predictions through:
 
 1. no shield;
 2. covariance threshold;
-3. raw detector threshold;
-4. calibrated detector threshold;
-5. calibrated detector plus hysteresis;
-6. full SHIELD-VIO with shift awareness and recovery.
+3. SUPER/SUPER-style short-horizon risk threshold where available;
+4. raw detector threshold;
+5. calibrated detector threshold;
+6. calibrated detector plus hysteresis;
+7. full SHIELD-VIO with shift awareness and recovery.
 
 The simulator includes a ground-truth trajectory, estimated trajectory, controller/path follower, goal, obstacles or boundaries, degradation, intervention, recovery/relocalization, and mission outcome. Estimated state drives decisions; ground truth scores outcomes.
 
-**Primary endpoint:** distance or time under invalid localization at matched mission-completion strata. **Secondary endpoints:** unsafe actions avoided, unnecessary interventions, intervention precision, lead time, halt/emergency-stop rates, recovery success, boundary violations, completion, delay, and path overhead.
+**Primary endpoint:** distance or time under invalid localization at matched mission-completion strata. The primary visualization is a safety–utility trade-off that reports unsafe exposure together with mission completion, so a policy cannot appear favorable merely by stopping more often. **Secondary endpoints:** unsafe actions avoided, unnecessary interventions, intervention precision, lead time, halt/emergency-stop rates, recovery success, boundary violations, completion, delay, and path overhead.
 
 Report a safety-utility Pareto curve and several frozen cost settings:
 
