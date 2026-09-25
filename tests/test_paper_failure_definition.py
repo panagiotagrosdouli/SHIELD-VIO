@@ -122,3 +122,22 @@ def test_undeclared_failure_label_cannot_be_used_as_criterion() -> None:
     }
     with pytest.raises(ValueError, match="not declared"):
         evaluate_failure_criteria(observations, _definition())
+
+
+def test_checked_in_primary_v2_freezes_motion_and_applicability_semantics() -> None:
+    path = Path(__file__).parents[1] / "configs/paper/failure_primary_v2.yaml"
+    definition = load_failure_definition(path)
+    assert definition.schema_version == "SHIELD_VIO_FAILURE_V2"
+    assert definition.imu_motion_gate is not None
+    gate = definition.imu_motion_gate
+    assert gate.schema_version == "SHIELD_VIO_IMU_MOTION_GATE_V1"
+    assert gate.window_seconds == pytest.approx(0.25)
+    assert gate.gyroscope_rms_threshold_rad_s == pytest.approx(0.05)
+    assert gate.accelerometer_norm_deviation_rms_threshold_m_s2 == pytest.approx(0.30)
+    criteria = {criterion.name: criterion for criterion in definition.criteria}
+    terminal = criteria["terminal_tracking_loss"]
+    assert terminal.applicability == "backend_declared"
+    assert terminal.explicitly_unsupported_policy == "not_applicable"
+    starvation = criteria["visual_update_starvation_while_motion"]
+    assert starvation.applicability == "visual_update_stream"
+    assert starvation.explicitly_unsupported_policy == "not_applicable"
