@@ -42,8 +42,13 @@ def _file_sha256(path: Path) -> str:
 
 def _files_sha256(root: Path, paths: list[Path]) -> str:
     digest = hashlib.sha256()
-    for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
-        relative = path.relative_to(root).as_posix().encode("utf-8")
+    resolved_root = root.resolve()
+    normalized = [path.resolve() for path in paths]
+    for path in sorted(
+        normalized,
+        key=lambda item: item.relative_to(resolved_root).as_posix(),
+    ):
+        relative = path.relative_to(resolved_root).as_posix().encode("utf-8")
         digest.update(len(relative).to_bytes(8, "little"))
         digest.update(relative)
         with path.open("rb") as stream:
