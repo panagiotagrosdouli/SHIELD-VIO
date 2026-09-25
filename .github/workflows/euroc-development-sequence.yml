@@ -1,0 +1,179 @@
+name: EuRoC development sequence
+
+on:
+  workflow_dispatch:
+    inputs:
+      sequence:
+        description: Frozen development sequence to execute
+        required: true
+        type: choice
+        options:
+          - MH_02_easy
+          - V1_01_easy
+          - MH_03_medium
+          - V1_02_medium
+          - V2_01_easy
+          - V2_02_medium
+  pull_request:
+    paths:
+      - 'shield_vio/**'
+      - 'scripts/acquire_euroc_development.py'
+      - 'scripts/convert_euroc_rosbag.py'
+      - 'scripts/run_euroc.py'
+      - 'scripts/export_primary_observables.py'
+      - 'scripts/export_primary_failure_targets.py'
+      - 'scripts/build_public_v2_canonical.py'
+      - 'configs/paper/euroc_development_sources.yaml'
+      - 'configs/paper/public_dataset_splits.yaml'
+      - 'configs/paper/failure_primary_v2.yaml'
+      - 'tests/test_euroc_development_acquisition.py'
+      - 'pyproject.toml'
+      - '.github/workflows/euroc-development-sequence.yml'
+
+jobs:
+  development-sequence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      SEQUENCE: ${{ github.event_name == 'workflow_dispatch' && inputs.sequence || 'MH_02_easy' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install development dataset dependencies
+        run: python -m pip install -e '.[dev,dataset]'
+
+      - name: Resolve frozen split role
+        id: metadata
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          import os
+          import yaml
+
+          sequence = os.environ["SEQUENCE"]
+          payload = yaml.safe_load(
+              Path("configs/paper/euroc_development_sources.yaml").read_text(
+                  encoding="utf-8"
+              )
+          )
+          entry = payload["sequences"][sequence]
+          print(f"split={entry['split']}")
+          print(f"file_id={entry['google_drive_file_id']}")
+          PY
+
+      - name: Restore source download cache
+        uses: actions/cache@v4
+        with:
+          path: data/euroc_sources/${{ env.SEQUENCE }}/source.download
+          key: euroc-development-${{ env.SEQUENCE }}-${{ steps.metadata.outputs.file_id }}
+
+      - name: Acquire registered development sequence
+        run: |
+          python scripts/acquire_euroc_development.py \
+            --sequence "$SEQUENCE" \
+            --output "data/euroc/$SEQUENCE" \
+            --work-dir "data/euroc_sources/$SEQUENCE" \
+            --registry configs/paper/euroc_development_sources.yaml \
+            --split-config configs/paper/public_dataset_splits.yaml
+          cat "data/euroc/$SEQUENCE/development_acquisition_receipt.json"
+
+      - name: Run internal ESKF with OpenCV rotation updates
+        run: |
+          python scripts/run_euroc.py "data/euroc/$SEQUENCE" \
+            --output "results/euroc_development/$SEQUENCE/estimator" \
+            --opencv-rotation
+
+      - name: Audit primary V2 observables
+        run: |
+          python scripts/export_primary_observables.py \
+            --run-dir "results/euroc_development/$SEQUENCE/estimator" \
+            --sequence-root "data/euroc/$SEQUENCE" \
+            --output "results/euroc_development/$SEQUENCE/primary_observables" \
+            --failure-config configs/paper/failure_primary_v2.yaml
+          cat "results/euroc_development/$SEQUENCE/primary_observables/primary_observable_audit.json"
+
+      - name: Export primary V2 events and targets
+        run: |
+          python scripts/export_primary_failure_targets.py \
+            --run-dir "results/euroc_development/$SEQUENCE/estimator" \
+            --sequence-root "data/euroc/$SEQUENCE" \
+            --output "results/euroc_development/$SEQUENCE/primary_failure_targets" \
+            --failure-config configs/paper/failure_primary_v2.yaml \
+            --evidence-level PUBLIC_DATASET_DEVELOPMENT
+          cat "results/euroc_development/$SEQUENCE/primary_failure_targets/primary_failure_manifest.json"
+
+      - name: Build canonical V2 development artifact
+        run: |
+          python scripts/build_public_v2_canonical.py \
+            --run-dir "results/euroc_development/$SEQUENCE/estimator" \
+            --sequence-root "data/euroc/$SEQUENCE" \
+            --output "results/euroc_development/$SEQUENCE/canonical_v2" \
+            --dataset euroc \
+            --sequence "$SEQUENCE" \
+            --estimator internal_eskf \
+            --split "${{ steps.metadata.outputs.split }}" \
+            --split-config configs/paper/public_dataset_splits.yaml \
+            --failure-config configs/paper/failure_primary_v2.yaml
+          cat "results/euroc_development/$SEQUENCE/canonical_v2/canonical_manifest.json"
+
+      - name: Validate split-safe canonical loading
+        run: |
+          SEQUENCE="$SEQUENCE" SPLIT="${{ steps.metadata.outputs.split }}" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          from shield_vio.datasets.splits import load_paper_split
+          from shield_vio.experiments.split_safe_development import (
+              load_canonical_prediction_run,
+          )
+
+          sequence = os.environ["SEQUENCE"]
+          split_name = os.environ["SPLIT"]
+          root = Path("results/euroc_development") / sequence / "canonical_v2"
+          paper_split = load_paper_split("configs/paper/public_dataset_splits.yaml")
+          run = load_canonical_prediction_run(
+              root,
+              paper_split=paper_split,
+              requested_split=split_name,
+              horizon_seconds=2.0,
+              expected_dataset="euroc",
+              expected_sequence=sequence,
+              expected_estimator="internal_eskf",
+          )
+          report = {
+              "status": "pass",
+              "sequence": sequence,
+              "split": split_name,
+              "eligible_samples_h2": int(run.eligible_mask.sum()),
+              "positive_windows_h2": int(run.labels[run.eligible_mask].sum()),
+              "negative_windows_h2": int((~run.labels[run.eligible_mask]).sum()),
+              "failure_events": int(len(run.events.onsets_ns)),
+              "feature_count": len(run.feature_names),
+          }
+          destination = root / "split_safe_validation.json"
+          destination.write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Copy acquisition receipt into result bundle
+        run: |
+          cp "data/euroc/$SEQUENCE/development_acquisition_receipt.json" \
+            "results/euroc_development/$SEQUENCE/development_acquisition_receipt.json"
+          cp "data/euroc/$SEQUENCE/portable_acquisition_manifest.json" \
+            "results/euroc_development/$SEQUENCE/portable_acquisition_manifest.json"
+
+      - name: Upload development artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-vio-euroc-development-${{ env.SEQUENCE }}
+          path: results/euroc_development/${{ env.SEQUENCE }}
+          if-no-files-found: error
+          retention-days: 30
