@@ -104,6 +104,7 @@ class ESKFBackend:
             innovation_nis=None if innovation is None else float(innovation.nis),
             covariance_min_eigenvalue=float(np.min(np.linalg.eigvalsh(symmetric_covariance))),
             covariance_symmetry_error=float(np.max(np.abs(covariance - covariance.T))),
+            terminal_tracking_loss_observable=False,
             reset_event=False,
             relocalization_event=False,
         )
