@@ -31,6 +31,10 @@ class EstimatorHealth:
     covariance_trace: float
     covariance_condition_number: float
     innovation_nis: float | None
+    covariance_min_eigenvalue: float | None = None
+    covariance_symmetry_error: float | None = None
+    reset_event: bool | None = None
+    relocalization_event: bool | None = None
 
 
 @runtime_checkable
