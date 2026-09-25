@@ -62,6 +62,9 @@ def _health_row(frame_timestamp_ns: int, health: EstimatorHealth) -> list[object
         "" if health.innovation_nis is None else health.innovation_nis,
         "" if health.covariance_min_eigenvalue is None else health.covariance_min_eigenvalue,
         "" if health.covariance_symmetry_error is None else health.covariance_symmetry_error,
+        ""
+        if health.terminal_tracking_loss_observable is None
+        else int(health.terminal_tracking_loss_observable),
         "" if health.reset_event is None else int(health.reset_event),
         "" if health.relocalization_event is None else int(health.relocalization_event),
     ]
@@ -248,6 +251,7 @@ def run_synchronized_frames(
                 "innovation_nis",
                 "covariance_min_eigenvalue",
                 "covariance_symmetry_error",
+                "terminal_tracking_loss_observable",
                 "reset_event",
                 "relocalization_event",
             ]
