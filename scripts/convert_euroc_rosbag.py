@@ -15,7 +15,6 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, Iterable
 
 import numpy as np
