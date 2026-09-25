@@ -22,6 +22,15 @@ Observable estimator/navigation quantities
 
 The current time is excluded from the future interval. A failure that has already become active at `t` therefore does not count as an impending-failure positive at `t`. Active-failure samples are ineligible for the early-warning task, and incomplete run tails are censored when `t + tau` exceeds the available observation interval.
 
+
+## Observability censoring
+
+Primary V2 labels are constructed only inside contiguous timeline segments where every applicable criterion is observable. A criterion that is explicitly `NOT_APPLICABLE` under the frozen backend-capability policy does not block the segment; an applicable but unavailable criterion does.
+
+An observability gap terminates the current segment. Criterion persistence, recovery confirmation, event merging, and future-horizon labels are never allowed to bridge that gap. A singleton observable island is censored because the event/target builders require a temporal interval. For each horizon, samples whose future interval extends beyond the end of their fully observable segment remain ineligible.
+
+The non-confirmatory exporter is `scripts/export_primary_failure_targets.py`. It writes `failure_events.csv`, `criterion_exceeded.csv`, `prediction_targets.csv`, and `primary_failure_manifest.json` with the frozen failure-config hash and source-run artifact hashes.
+
 ## Primary criteria
 
 The checked-in configuration mirrors `FAILURE_DEFINITION.md`: aligned position error, orientation geodesic error, 1 s translational and rotational relative-pose error, invalid/non-finite state, output starvation, terminal tracking loss, visual-update starvation while motion is observed, and estimator reset/unrecovered relocalization. Ground-truth-dependent criteria are explicitly marked as such and are restricted to the offline label path.
