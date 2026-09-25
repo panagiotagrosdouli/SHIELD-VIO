@@ -33,6 +33,7 @@ class EstimatorHealth:
     innovation_nis: float | None
     covariance_min_eigenvalue: float | None = None
     covariance_symmetry_error: float | None = None
+    terminal_tracking_loss_observable: bool | None = None
     reset_event: bool | None = None
     relocalization_event: bool | None = None
 
