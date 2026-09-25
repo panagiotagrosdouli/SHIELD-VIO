@@ -95,3 +95,10 @@ def test_sequence_member_matching_is_root_prefix_independent() -> None:
         )
         is None
     )
+    assert (
+        _member_relative_to_sequence(
+            "mav0/cam0/data.csv",
+            "MH_02_easy",
+        )
+        == "mav0/cam0/data.csv"
+    )
