@@ -213,11 +213,22 @@ def test_public_v2_feature_sources_are_causal(tmp_path: Path) -> None:
     with health_path.open("r", encoding="utf-8", newline="") as stream:
         rows = list(csv.DictReader(stream))
         fields = list(rows[0])
-    rows[3]["state_timestamp_ns"] = str(int(rows[3]["frame_timestamp_ns"]) + 1)
+    future_state = str(int(rows[3]["frame_timestamp_ns"]) + 1)
+    rows[3]["state_timestamp_ns"] = future_state
     with health_path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
+
+    trajectory_path = run / "trajectory.csv"
+    with trajectory_path.open("r", encoding="utf-8", newline="") as stream:
+        trajectory_rows = list(csv.DictReader(stream))
+        trajectory_fields = list(trajectory_rows[0])
+    trajectory_rows[3]["state_timestamp_ns"] = future_state
+    with trajectory_path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=trajectory_fields)
+        writer.writeheader()
+        writer.writerows(trajectory_rows)
 
     try:
         build_public_v2_prediction_artifacts(
