@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 
 from shield_vio.core.math import quat_to_rot
+from shield_vio.datasets.euroc import read_imu_samples
+from shield_vio.evaluation.failure_definition import FailureDefinition
 from shield_vio.evaluation.trajectory_metrics import align_positions_se3
 
 
@@ -32,6 +34,7 @@ class PrimaryObservableTable:
     timestamps_ns: np.ndarray
     values: dict[str, np.ndarray]
     observable: dict[str, np.ndarray]
+    applicable: dict[str, np.ndarray]
     sources: dict[str, str]
 
     def __post_init__(self) -> None:
@@ -42,6 +45,8 @@ class PrimaryObservableTable:
             raise ValueError("primary observable value keys do not match frozen criteria")
         if set(self.observable) != set(PRIMARY_CRITERIA):
             raise ValueError("primary observable masks do not match frozen criteria")
+        if set(self.applicable) != set(PRIMARY_CRITERIA):
+            raise ValueError("primary observable applicability masks do not match frozen criteria")
         if set(self.sources) != set(PRIMARY_CRITERIA):
             raise ValueError("primary observable sources do not match frozen criteria")
         for name in PRIMARY_CRITERIA:
@@ -49,6 +54,13 @@ class PrimaryObservableTable:
                 raise ValueError(f"observable value shape mismatch: {name}")
             if np.asarray(self.observable[name], dtype=bool).shape != timestamps.shape:
                 raise ValueError(f"observable mask shape mismatch: {name}")
+            if np.asarray(self.applicable[name], dtype=bool).shape != timestamps.shape:
+                raise ValueError(f"applicability mask shape mismatch: {name}")
+            if np.any(
+                np.asarray(self.observable[name], dtype=bool)
+                & ~np.asarray(self.applicable[name], dtype=bool)
+            ):
+                raise ValueError(f"criterion cannot be observable where it is not applicable: {name}")
 
 
 def _dict_rows(path: Path) -> list[dict[str, str]]:
