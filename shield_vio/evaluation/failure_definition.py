@@ -106,7 +106,11 @@ def load_failure_definition(path: str | Path) -> FailureDefinition:
         normalized = name.lower()
         if any(token in normalized for token in PROHIBITED_CRITERION_TOKENS):
             raise ValueError(f"experiment oracle cannot define failure: {name}")
-        comparison = str(settings.get("comparison", "true"))
+        raw_comparison = settings.get("comparison", "true")
+        if isinstance(raw_comparison, bool):
+            comparison = "true" if raw_comparison else "false"
+        else:
+            comparison = str(raw_comparison).strip().lower()
         threshold = settings.get("threshold", settings.get("threshold_seconds"))
         applicability = str(settings.get("applicability", "always"))
         if applicability not in {"always", "backend_declared", "visual_update_stream"}:
