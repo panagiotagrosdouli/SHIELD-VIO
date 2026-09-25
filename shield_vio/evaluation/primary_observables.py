@@ -168,6 +168,121 @@ def _one_second_predecessors(
     return selected.astype(int), valid
 
 
+def _criterion(definition: FailureDefinition | None, name: str):
+    if definition is None:
+        return None
+    matches = [criterion for criterion in definition.criteria if criterion.name == name]
+    if len(matches) != 1:
+        raise ValueError(f"failure definition must declare criterion exactly once: {name}")
+    return matches[0]
+
+
+def _optional_csv_rows(path: Path) -> tuple[list[dict[str, str]], tuple[str, ...]]:
+    if not path.is_file():
+        return [], ()
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        fieldnames = tuple(reader.fieldnames or ())
+        return list(reader), fieldnames
+
+
+def _visual_starvation_observable(
+    run: Path,
+    sequence: Path,
+    timestamps: np.ndarray,
+    definition: FailureDefinition | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
+    values = np.full(len(timestamps), np.nan, dtype=float)
+    observable = np.zeros(len(timestamps), dtype=bool)
+    applicable = np.ones(len(timestamps), dtype=bool)
+    criterion = _criterion(definition, "visual_update_starvation_while_motion")
+
+    manifest_path = run / "experiment_manifest.json"
+    if not manifest_path.is_file():
+        return values, observable, applicable, "NOT_OBSERVABLE: estimator manifest missing"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provider = manifest.get("visual_provider")
+    if provider in {None, "", "none"}:
+        if (
+            criterion is not None
+            and criterion.applicability == "visual_update_stream"
+            and criterion.explicitly_unsupported_policy == "not_applicable"
+        ):
+            applicable[:] = False
+            return (
+                values,
+                observable,
+                applicable,
+                "NOT_APPLICABLE: run declares no visual-update provider",
+            )
+        return values, observable, applicable, "NOT_OBSERVABLE: visual-update provider unknown"
+
+    if definition is None or definition.imu_motion_gate is None:
+        return values, observable, applicable, "NOT_OBSERVABLE: versioned IMU motion gate missing"
+    gate = definition.imu_motion_gate
+
+    update_rows, update_fields = _optional_csv_rows(run / "visual_updates.csv")
+    if not update_fields or "frame_timestamp_ns" not in update_fields:
+        return values, observable, applicable, "NOT_OBSERVABLE: visual update log missing"
+    accepted_ns = np.asarray(
+        [int(row["frame_timestamp_ns"]) for row in update_rows], dtype=np.int64
+    )
+    if len(accepted_ns) and np.any(np.diff(accepted_ns) <= 0):
+        raise ValueError("visual update timestamps must be strictly increasing")
+
+    imu = read_imu_samples(sequence)
+    imu_ns = np.asarray([sample.timestamp_ns for sample in imu], dtype=np.int64)
+    gyro_norm = np.asarray(
+        [np.linalg.norm(sample.angular_velocity_rad_s) for sample in imu], dtype=float
+    )
+    accel_deviation = np.asarray(
+        [
+            abs(np.linalg.norm(sample.linear_acceleration_m_s2) - gate.gravity_m_s2)
+            for sample in imu
+        ],
+        dtype=float,
+    )
+    if np.any(~np.isfinite(gyro_norm)) or np.any(~np.isfinite(accel_deviation)):
+        raise ValueError("IMU motion-gate inputs must be finite")
+
+    window_ns = int(round(gate.window_seconds * 1e9))
+    left = np.searchsorted(imu_ns, timestamps - window_ns, side="right")
+    right = np.searchsorted(imu_ns, timestamps, side="right")
+    motion = np.zeros(len(timestamps), dtype=bool)
+    motion_observable = np.zeros(len(timestamps), dtype=bool)
+    for index, (start, stop) in enumerate(zip(left, right, strict=True)):
+        if stop <= start:
+            continue
+        gyro_rms = float(np.sqrt(np.mean(np.square(gyro_norm[start:stop]))))
+        accel_rms = float(np.sqrt(np.mean(np.square(accel_deviation[start:stop]))))
+        motion[index] = (
+            gyro_rms > gate.gyroscope_rms_threshold_rad_s
+            or accel_rms > gate.accelerometer_norm_deviation_rms_threshold_m_s2
+        )
+        motion_observable[index] = True
+
+    last_update_ns = int(timestamps[0])
+    update_index = 0
+    for index, timestamp in enumerate(timestamps):
+        while update_index < len(accepted_ns) and accepted_ns[update_index] <= timestamp:
+            last_update_ns = int(accepted_ns[update_index])
+            update_index += 1
+        if not motion_observable[index]:
+            continue
+        observable[index] = True
+        if motion[index]:
+            values[index] = max(0.0, float(timestamp - last_update_ns) * 1e-9)
+        else:
+            values[index] = 0.0
+
+    source = (
+        f"visual_updates.csv + trailing {gate.window_seconds:g}s IMU RMS motion gate "
+        f"({gate.schema_version}; gyro>{gate.gyroscope_rms_threshold_rad_s:g} rad/s OR "
+        f"|a|-g RMS>{gate.accelerometer_norm_deviation_rms_threshold_m_s2:g} m/s^2)"
+    )
+    return values, observable, applicable, source
+
+
 def build_primary_observables(
     run_dir: str | Path,
     sequence_root: str | Path,
@@ -177,6 +292,7 @@ def build_primary_observables(
     rpe_pair_tolerance_seconds: float = 0.075,
     covariance_psd_tolerance: float = 1e-9,
     covariance_symmetry_tolerance: float = 1e-9,
+    failure_definition: FailureDefinition | None = None,
 ) -> PrimaryObservableTable:
     """Build all currently defensible primary failure observations.
 
