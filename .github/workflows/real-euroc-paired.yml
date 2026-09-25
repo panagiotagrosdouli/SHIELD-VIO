@@ -7,6 +7,8 @@ on:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
       - 'scripts/run_paper_vertical_slice.py'
+      - 'scripts/validate_public_smoke.py'
+      - 'tests/test_validate_public_smoke.py'
       - 'configs/paper/vertical_slice_smoke.yaml'
       - '.github/workflows/real-euroc-paired.yml'
   push:
@@ -15,6 +17,7 @@ on:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
       - 'scripts/compare_real_euroc_runs.py'
+      - 'scripts/validate_public_smoke.py'
       - '.github/workflows/real-euroc-paired.yml'
 
 jobs:
@@ -69,6 +72,14 @@ jobs:
             --output results/real_euroc/MH_01_easy/paper_vertical_slice \
             --config configs/paper/vertical_slice_smoke.yaml \
             --seed 7
+      - name: Validate publication smoke evidence gate
+        run: |
+          python scripts/validate_public_smoke.py \
+            results/real_euroc/MH_01_easy/paper_vertical_slice \
+            --expected-dataset EuRoC_MAV \
+            --expected-sequence MH_01_easy \
+            --report results/real_euroc/MH_01_easy/paper_vertical_slice/smoke_validation.json
+          cat results/real_euroc/MH_01_easy/paper_vertical_slice/smoke_validation.json
       - name: Upload real benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
