@@ -13,7 +13,8 @@ license = {text = "MIT"}
 dependencies = ["numpy>=1.24", "matplotlib>=3.7", "PyYAML>=6.0", "Pillow>=10.0", "opencv-python-headless>=4.8"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.5", "black>=24.0", "pre-commit>=3.7"]\ndataset = ["rosbags>=0.11.5,<0.12"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.5", "black>=24.0", "pre-commit>=3.7"]
+dataset = ["rosbags>=0.11.5,<0.12"]
 
 [tool.setuptools.packages.find]
 include = ["shield_vio*", "scripts*"]
