@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -41,6 +42,9 @@ def main() -> None:
     report = write_primary_observable_artifacts(table, args.output)
     report["failure_definition_schema"] = definition.schema_version
     report["failure_config"] = str(args.failure_config)
+    report["failure_config_sha256"] = hashlib.sha256(
+        args.failure_config.read_bytes()
+    ).hexdigest()
     (args.output / "primary_observable_audit.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
