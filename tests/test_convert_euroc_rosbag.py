@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-import yaml
 
 from scripts.convert_euroc_rosbag import (
     _image_array,
