@@ -7,6 +7,7 @@ import yaml
 
 from scripts.acquire_euroc_development import (
     _extract_source,
+    _files_sha256,
     _member_relative_to_sequence,
     _reader_path,
 )
@@ -102,3 +103,15 @@ def test_sequence_member_matching_is_root_prefix_independent() -> None:
         )
         == "mav0/cam0/data.csv"
     )
+
+
+def test_subset_hash_normalizes_path_representations(tmp_path: Path) -> None:
+    root = tmp_path / "subset"
+    child = root / "mav0/imu0/data.csv"
+    child.parent.mkdir(parents=True)
+    child.write_text("fixture\\n", encoding="utf-8")
+
+    absolute_digest = _files_sha256(root.resolve(), [child.resolve()])
+    mixed_digest = _files_sha256(root, [child.resolve()])
+    assert mixed_digest == absolute_digest
+    assert len(mixed_digest) == 64
