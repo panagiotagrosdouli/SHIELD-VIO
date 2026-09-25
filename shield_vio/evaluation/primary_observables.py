@@ -109,7 +109,8 @@ def _nearest_indices(
     choose_right = right_gap < left_gap
     selected = np.where(choose_right, right, left)
     gap = np.minimum(right_gap, left_gap)
-    observable = gap <= int(round(max_gap_seconds * 1e9))
+    inside = (query_ns >= reference_ns[0]) & (query_ns <= reference_ns[-1])
+    observable = inside & (gap <= int(round(max_gap_seconds * 1e9)))
     return selected.astype(int), observable
 
 
@@ -274,17 +275,24 @@ def build_primary_observables(
             )
             invalid_pose_or_covariance[index] |= covariance_invalid
 
-    output_starvation = np.maximum(0.0, (timestamps - state_timestamps).astype(float) * 1e-9)
-    output_observable = np.isfinite(output_starvation)
+    state_age_ns = timestamps - state_timestamps
+    output_observable = state_age_ns >= 0
+    output_starvation = np.full(len(timestamps), np.nan, dtype=float)
+    output_starvation[output_observable] = state_age_ns[output_observable].astype(float) * 1e-9
 
     tracking_values = np.zeros(len(timestamps), dtype=bool)
-    tracking_observable = np.ones(len(timestamps), dtype=bool)
+    tracking_observable = np.zeros(len(timestamps), dtype=bool)
     lost_states = {"lost", "terminal", "failed", "tracking_lost"}
     for index, row in enumerate(health):
         status = str(row.get("tracking_status", "")).strip().lower()
-        if not status:
-            tracking_observable[index] = False
-        else:
+        observable_text = str(row.get("terminal_tracking_loss_observable", "")).strip()
+        if not status or observable_text == "":
+            continue
+        try:
+            tracking_observable[index] = bool(int(observable_text))
+        except ValueError as exc:
+            raise ValueError("terminal_tracking_loss_observable must be 0 or 1") from exc
+        if tracking_observable[index]:
             tracking_values[index] = status in lost_states
 
     reset_relocalization = np.zeros(len(timestamps), dtype=bool)
@@ -332,7 +340,9 @@ def build_primary_observables(
         "rotation_rpe_1s_deg": "timestamp-paired estimator and ground-truth attitudes",
         "invalid_pose_or_covariance": "trajectory.csv + health covariance validity diagnostics",
         "output_starvation": "frame_timestamp_ns - state_timestamp_ns",
-        "terminal_tracking_loss": "health.csv tracking_status",
+        "terminal_tracking_loss": (
+            "health.csv tracking_status gated by terminal_tracking_loss_observable"
+        ),
         "visual_update_starvation_while_motion": "NOT_OBSERVABLE: motion gate not frozen",
         "estimator_reset_or_unrecovered_relocalization": (
             "health.csv reset_event OR relocalization_event"
