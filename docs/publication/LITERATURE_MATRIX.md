@@ -17,6 +17,27 @@ This matrix links planned manuscript claims to representative prior work and ide
 | Selective prediction / abstention | \cite{geifman2019selectivenet} | Risk-coverage trade-offs provide an abstention framework | Does abstention or conservative mode improve declared mission utility rather than merely reduce exposure by stopping? | Closed-loop comparison required |
 | Runtime assurance | \cite{seto1998simplex,hsu2024safetyfilter} | Runtime monitoring/intervention can separate performance and protection layers | Is SHIELD-VIO appropriately framed as empirical supervisory protection rather than formal safety assurance? | Claim-language requirement |
 
+
+## Closest-prior-art conclusion
+
+The current search rules out several broad novelty claims:
+
+- **Do not claim:** “first to predict localization failure.” Time-to-failure and predictive localization monitoring already exist for scan-matching/particle-filter localization \cite{tsuchiya2020ttf,eder2022localizationmonitor,knitt2025predictivemonitoring}.
+- **Do not claim:** “first VIO health monitor” or “first to switch when VIO fails.” VIO integrity monitoring and health-triggered estimator switching already exist \cite{wang2019pdrviointegrity,joshi2023smvio}.
+- **Do not claim:** “first to avoid SLAM tracking failure using introspection.” Introspective-SLAM explicitly evaluates future navigation steps and plans around tracking failure \cite{naveed2022introspectiveslam}.
+- **Do not claim:** “first failure-centric VIO benchmark.” A 2026 benchmark now stress-tests multiple VIO paradigms under degradation/miscalibration/occlusion \cite{zhu2026failurebenchmark}.
+- **Do not claim:** “first calibrated or conformal SLAM under domain shift.” Calibration/conformal mechanisms are already being applied inside SLAM \cite{chen2026cf2slam}.
+
+### Candidate defensible contribution
+
+Subject to completion of the remaining literature search and the experiments, the strongest candidate contribution is:
+
+> **A leakage-resistant, estimator-facing framework that formulates VIO degradation as calibrated prediction of persistent future localization-failure events from causal multi-signal health history, explicitly evaluates warning lead time and probability reliability under domain shift, and couples the predicted risk to stateful protective navigation actions under a common public-dataset/closed-loop protocol.**
+
+The likely differentiator is therefore the **combination and evaluation contract**: VIO-specific causal health signals + fixed future horizons + persistent event labels + held-out probability calibration + domain-shift evaluation + protective-policy consequences + run-level paired inference. Each individual ingredient has prior art.
+
+A stronger paper can additionally test whether this framework transfers from the internal ESKF to an established estimator such as OpenVINS. If successful, an architecture-general claim can be made narrowly over the executed estimators; without that experiment, the paper should remain VIO-backend-specific.
+
 ## Literature gaps that must still be searched before freezing novelty
 
 1. VIO-specific **future** failure forecasting from estimator internals, not only current confidence or failure detection.
