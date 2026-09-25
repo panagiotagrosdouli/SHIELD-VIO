@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a checksum-verified EuRoC ROS1 bag into the minimal ASL tree used by SHIELD-VIO.
+"""Convert a checksum-verified EuRoC ROS bag source into the minimal ASL tree used by SHIELD-VIO.
 
 This utility is intended for PUBLIC_DATASET_SMOKE portability when the legacy ETH
 per-sequence host is unreachable from CI. It does not establish official archive
@@ -42,11 +42,34 @@ class ConversionSummary:
 
 
 def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    if path.is_file():
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    if path.is_dir():
+        digest = hashlib.sha256()
+        files = sorted(item for item in path.rglob("*") if item.is_file())
+        if not files:
+            raise ValueError(f"source directory contains no files: {path}")
+        for item in files:
+            relative = item.relative_to(path).as_posix().encode("utf-8")
+            digest.update(len(relative).to_bytes(8, "little"))
+            digest.update(relative)
+            with item.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        return digest.hexdigest()
+    raise FileNotFoundError(path)
+
+
+def _source_bytes(path: Path) -> int:
+    if path.is_file():
+        return int(path.stat().st_size)
+    if path.is_dir():
+        return int(sum(item.stat().st_size for item in path.rglob("*") if item.is_file()))
+    raise FileNotFoundError(path)
 
 
 def _verify_sha256(path: Path, expected: str) -> str:
@@ -225,7 +248,7 @@ def convert_rosbag(
     openvins_imu_calibration: Path,
     openvins_revision: str,
 ) -> dict[str, Any]:
-    """Convert cam0 and imu0 from one EuRoC ROS bag into a minimal ASL directory."""
+    """Convert cam0 and imu0 from one EuRoC ROS1/ROS2 bag into a minimal ASL directory."""
 
     if output_root.exists() and any(output_root.iterdir()):
         raise FileExistsError(f"refusing to overwrite non-empty output directory: {output_root}")
@@ -360,7 +383,8 @@ def convert_rosbag(
         "source": {
             "bag_url": source_url,
             "bag_sha256": bag_sha256,
-            "bag_bytes": bag_path.stat().st_size,
+            "bag_bytes": _source_bytes(bag_path),
+            "bag_source_kind": "directory" if bag_path.is_dir() else "file",
             "openvins_revision": openvins_revision,
             "openvins_ground_truth_sha256": _sha256(openvins_ground_truth),
             "openvins_imucam_calibration_sha256": _sha256(openvins_imucam_calibration),
