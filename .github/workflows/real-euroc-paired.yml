@@ -15,6 +15,7 @@ on:
       - 'tests/test_convert_euroc_rosbag.py'
       - 'pyproject.toml'
       - 'configs/paper/vertical_slice_smoke.yaml'
+      - 'configs/paper/failure_primary_v2.yaml'
       - '.github/workflows/real-euroc-paired.yml'
   push:
     branches: [main]
