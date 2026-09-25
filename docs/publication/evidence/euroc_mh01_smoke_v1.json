@@ -1,0 +1,175 @@
+{
+  "acquisition": {
+    "acquisition_mode": "checksum_verified_rosbag_mirror_plus_pinned_openvins",
+    "claim_boundary": "Portable CI acquisition from a checksum-verified ROS bag mirror plus pinned OpenVINS calibration/ground-truth exports. This does not establish identity with the current ETH Research Collection archive for confirmatory evaluation.",
+    "confirmatory_identity": false,
+    "dataset": "EuRoC_MAV",
+    "schema_version": 2,
+    "sequence": "MH_01_easy",
+    "source_bytes": 2673818914,
+    "source_sha256": "57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9",
+    "source_url": "https://huggingface.co/datasets/kavehsgh/EuRoC_MAV_Dataset_Machine_Hall_Easy_01/resolve/main/MH_01_easy.bag?download=true"
+  },
+  "claim_boundary": "Permanent machine-derived receipt of one validated real EuRoC smoke run. It preserves provenance and key outcomes but is not confirmatory evidence and does not establish H1-H5, detector superiority, calibration quality, estimator improvement, or dataset identity with the current ETH Research Collection archive.",
+  "confirmatory": false,
+  "dataset": "EuRoC_MAV",
+  "evidence_level": "PUBLIC_DATASET_SMOKE",
+  "paired_estimator_comparison": {
+    "alignment": "se3",
+    "associated_samples": 3639,
+    "baseline": {
+      "ate_rmse_m": 68703.69717243155,
+      "configuration": "IMU-only ESKF propagation",
+      "rpe_translation_rmse_m": 71.14161637502683
+    },
+    "benchmark": "paired real EuRoC comparison",
+    "claim_boundary": "Real EuRoC sensor and ground-truth results. The visual configuration fuses monocular relative rotation only; it is not a full metric visual-inertial system.",
+    "delta": {
+      "ate_relative_change": 0.10397529452471987,
+      "ate_rmse_m": 7143.487148440734,
+      "rpe_relative_change": 0.11948470329467953,
+      "rpe_translation_rmse_m": 8.50033492447399
+    },
+    "opencv_rotation": {
+      "ate_rmse_m": 75847.18432087229,
+      "configuration": "IMU ESKF plus monocular OpenCV rotation updates",
+      "mean_inlier_ratio": 0.8498834307027994,
+      "median_innovation_nis": 1.0204603263658263,
+      "rpe_translation_rmse_m": 79.64195129950082,
+      "visual_updates": 682
+    },
+    "sequence": "MH_01_easy"
+  },
+  "schema_version": "SHIELD_VIO_REAL_EUROC_SMOKE_RECEIPT_V1",
+  "sequence": "MH_01_easy",
+  "smoke_manifest_summary": {
+    "claim_boundary": "One real EuRoC sequence tested after analytic synthetic health training, calibration, and validation. This verifies pipeline execution only and does not confirm H1-H5.",
+    "configuration_sha256": "d74ddbf702e8b7df6720f6d166db5e58084d06055ff3c901b35a784eceb90956",
+    "dataset_index_sha256": "fe9c2d547d05b67ce7b97da7baa84525630f4cb6b53ef7e65df45127ade5b00c",
+    "discrimination_defined": false,
+    "failure_definition": {
+      "criterion": "se3_aligned_position_error",
+      "persistence_seconds": 0.5,
+      "threshold_m": 1
+    },
+    "prediction_horizon_seconds": 2,
+    "sample_counts": {
+      "associated": 3638,
+      "eligible": 10,
+      "failure_events": 1,
+      "negative_windows": 0,
+      "positive_windows": 10
+    },
+    "target_status": "SINGLE_CLASS_POSITIVE"
+  },
+  "smoke_validation": {
+    "artifact_hashes_checked": true,
+    "associated_samples": 3638,
+    "causal_provenance_checked": true,
+    "claim_boundary_checked": true,
+    "confirmatory": false,
+    "dataset": "EuRoC_MAV",
+    "discrimination_defined": false,
+    "eligible_samples": 10,
+    "evidence_level": "PUBLIC_DATASET_SMOKE",
+    "failure_events": 1,
+    "negative_windows": 0,
+    "positive_windows": 10,
+    "schema_version": 1,
+    "sequence": "MH_01_easy",
+    "status": "pass",
+    "target_status": "SINGLE_CLASS_POSITIVE",
+    "validated_artifact_count": 11,
+    "validation": "SHIELD_VIO_PUBLIC_DATASET_SMOKE_GATE_V1"
+  },
+  "source_file_sha256": {
+    "comparison.json": "56c604780672a8262934c3439783c0e8906a450255b43fbeea2d9e0d61df7b16",
+    "dataset_download_receipt.json": "db1105eed2bdeedb744322210058b3598b51b320dce6490f573ddd46c22c1113",
+    "imu_only/metrics.json": "ff211e1d879793a2a3ea44b1d951e3561bb2063601192930e8ec0a370fa07da9",
+    "opencv_rotation/metrics.json": "628a95f1648439d403a718d03d092e889819b91ab463be4b0d727855dd6189d4",
+    "paper_vertical_slice/experiment_manifest.json": "bf338686e6d226299b87b430f168b2c10b854cf187805393e91974b2307840dc",
+    "paper_vertical_slice/metrics.json": "4828b9cc6ea7026a1938976197e7e9f47c232b22675c8ffa744dd9b202b5b9ce",
+    "paper_vertical_slice/smoke_validation.json": "1e102f54cbd251424489d332dd7804b13438d269ce2cf95c7b0db0cb9ddbcaaa",
+    "portable_acquisition_manifest.json": "6715ec3ffe26eb375abb1cbd0ed2ab7ee37ca0bb34cf566e9f502e40ef0d2899"
+  },
+  "workflow": {
+    "artifact_digest_sha256": "00651eab258efbaaff66e504b2315116aa12d36e1789f020c48970261d745ce0",
+    "artifact_id": 10865059065,
+    "artifact_name": "shield-vio-real-euroc-mh01-paired",
+    "head_branch": "paper/euroc-portable-acquisition",
+    "head_sha": "6be99ad60aeadc7ab7fc1c0d9e313984ae42a7af",
+    "merged_main_sha": "c056470731e7d73f3ec5f012e7b9d5a6b011075f",
+    "run_id": 36137522756
+  },
+  "primary_observable_audit": {
+    "schema_version": "SHIELD_VIO_PRIMARY_OBSERVABLE_AUDIT_V1",
+    "status": "BLOCKED",
+    "sample_count": 3682,
+    "workflow_run_id": 36138730515,
+    "workflow_head_sha": "2c0954d8d8b5b6677ed261dd34f110666205ab6e",
+    "merged_main_sha": "c71ff56a4ed034b4753f78d1a5f12ab7d10e436a",
+    "artifact_id": 10864689977,
+    "artifact_digest_sha256": "e0a1f102fc7ddd65a8bf9e57fdfecf79230eadb60e464dc4be93ded6d078849a",
+    "blocking_criteria": [
+      "terminal_tracking_loss",
+      "visual_update_starvation_while_motion"
+    ],
+    "criteria": {
+      "position_error_m": {
+        "observable_samples": 3638,
+        "total_samples": 3682,
+        "observable_fraction": 0.9880499728408474,
+        "status": "OBSERVABLE"
+      },
+      "orientation_error_deg": {
+        "observable_samples": 3638,
+        "total_samples": 3682,
+        "observable_fraction": 0.9880499728408474,
+        "status": "OBSERVABLE"
+      },
+      "translation_rpe_1s_m": {
+        "observable_samples": 3618,
+        "total_samples": 3682,
+        "observable_fraction": 0.9826181423139598,
+        "status": "OBSERVABLE"
+      },
+      "rotation_rpe_1s_deg": {
+        "observable_samples": 3618,
+        "total_samples": 3682,
+        "observable_fraction": 0.9826181423139598,
+        "status": "OBSERVABLE"
+      },
+      "invalid_pose_or_covariance": {
+        "observable_samples": 3682,
+        "total_samples": 3682,
+        "observable_fraction": 1,
+        "status": "OBSERVABLE"
+      },
+      "output_starvation": {
+        "observable_samples": 3682,
+        "total_samples": 3682,
+        "observable_fraction": 1,
+        "status": "OBSERVABLE"
+      },
+      "terminal_tracking_loss": {
+        "observable_samples": 0,
+        "total_samples": 3682,
+        "observable_fraction": 0,
+        "status": "NOT_OBSERVABLE"
+      },
+      "visual_update_starvation_while_motion": {
+        "observable_samples": 0,
+        "total_samples": 3682,
+        "observable_fraction": 0,
+        "status": "NOT_OBSERVABLE"
+      },
+      "estimator_reset_or_unrecovered_relocalization": {
+        "observable_samples": 3682,
+        "total_samples": 3682,
+        "observable_fraction": 1,
+        "status": "OBSERVABLE"
+      }
+    },
+    "claim_boundary": "Availability audit only. Primary SHIELD_VIO_FAILURE_V1 events were not built because two enabled criteria remained non-observable."
+  }
+}
