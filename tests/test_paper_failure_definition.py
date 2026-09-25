@@ -136,6 +136,7 @@ def test_checked_in_primary_v2_freezes_motion_and_applicability_semantics() -> N
     assert gate.accelerometer_norm_deviation_rms_threshold_m_s2 == pytest.approx(0.30)
     criteria = {criterion.name: criterion for criterion in definition.criteria}
     terminal = criteria["terminal_tracking_loss"]
+    assert terminal.comparison == "true"
     assert terminal.applicability == "backend_declared"
     assert terminal.explicitly_unsupported_policy == "not_applicable"
     starvation = criteria["visual_update_starvation_while_motion"]
