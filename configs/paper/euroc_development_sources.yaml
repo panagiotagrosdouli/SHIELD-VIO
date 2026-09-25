@@ -1,0 +1,80 @@
+schema_version: SHIELD_VIO_EUROC_DEVELOPMENT_SOURCES_V1
+dataset: euroc
+confirmatory_identity: false
+openvins_revision: 69488123ed9362dd44b6f28e7f4680abbff1442b
+claim_boundary: >-
+  Development-only portable acquisition registry. Sources and observed hashes are
+  used to build train/calibration/validation artifacts. This registry does not
+  establish identity with the current ETH Research Collection confirmatory archive.
+
+sequences:
+  MH_02_easy:
+    split: train
+    source_kind: openvins_google_drive_rosbag2
+    google_drive_file_id: 1wWZgZCqYz6zzzTXS0iqvQCP-cWfFuGLK
+    expected_download_sha256: null
+    ground_truth_file: MH_02_easy.txt
+    fallback:
+      source_kind: huggingface_aggregate_zip_range
+      url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/machine_hall.zip?download=true
+      expected_subset_sha256: bea2661637a1aef840ebf7fd899b3ddc9881b728d48356a138f05578202e4ed8
+  V1_01_easy:
+    split: train
+    source_kind: openvins_google_drive_rosbag2
+    google_drive_file_id: 1LFrdiMU6UBjtFfXPHzjJ4L7iDIXcdhvh
+    expected_download_sha256: null
+    ground_truth_file: V1_01_easy.txt
+    ground_truth_note: openvins_pinned_corrected_orientation_trajectory
+    fallback:
+      source_kind: huggingface_aggregate_zip_range
+      url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room1.zip?download=true
+      expected_subset_sha256: null
+  MH_03_medium:
+    split: calibration
+    source_kind: openvins_google_drive_rosbag2
+    google_drive_file_id: 1er07gZ8rso8R3Su00hJMm_GZ4z1n9Rpq
+    expected_download_sha256: null
+    ground_truth_file: MH_03_medium.txt
+    fallback:
+      source_kind: huggingface_aggregate_zip_range
+      url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/machine_hall.zip?download=true
+      expected_subset_sha256: null
+  V1_02_medium:
+    split: calibration
+    source_kind: openvins_google_drive_rosbag2
+    google_drive_file_id: 1rlGSy7h38ucm8jr8ssH-sJPX84JfkBtX
+    expected_download_sha256: null
+    ground_truth_file: V1_02_medium.txt
+    fallback:
+      source_kind: huggingface_aggregate_zip_range
+      url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room1.zip?download=true
+      expected_subset_sha256: null
+  V2_01_easy:
+    split: validation
+    source_kind: openvins_google_drive_rosbag2
+    google_drive_file_id: 1KAkE8Ptq3eSQlXMozJgzNIAVUBH3h0FP
+    expected_download_sha256: null
+    ground_truth_file: V2_01_easy.txt
+    fallback:
+      source_kind: huggingface_aggregate_zip_range
+      url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room2.zip?download=true
+      expected_subset_sha256: null
+  V2_02_medium:
+    split: validation
+    source_kind: openvins_google_drive_rosbag2
+    google_drive_file_id: 1Gj4psmvcAwYwCp4T4CQH-d2ZVJ09d3x2
+    expected_download_sha256: null
+    ground_truth_file: V2_02_medium.txt
+    fallback:
+      source_kind: huggingface_aggregate_zip_range
+      url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room2.zip?download=true
+      expected_subset_sha256: null
+
+freeze_policy:
+  first_success:
+    allow_unfrozen_download_hash: true
+    required_receipt_status: observed_unfrozen
+  repeat_success:
+    expected_download_sha256_required: true
+  before_test_open:
+    all_development_download_hashes_frozen: true

@@ -14,7 +14,7 @@ dependencies = ["numpy>=1.24", "matplotlib>=3.7", "PyYAML>=6.0", "Pillow>=10.0",
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.5", "black>=24.0", "pre-commit>=3.7"]
-dataset = ["rosbags>=0.11.5,<0.12"]
+dataset = ["rosbags>=0.11.5,<0.12", "gdown>=5.2,<6", "fsspec[http]>=2026.5,<2027"]
 
 [tool.setuptools.packages.find]
 include = ["shield_vio*", "scripts*"]
