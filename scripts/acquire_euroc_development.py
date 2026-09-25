@@ -184,6 +184,7 @@ def acquire(
         openvins_imucam_calibration=imucam,
         openvins_imu_calibration=imu,
         openvins_revision=revision,
+        evidence_scope="PUBLIC_DATASET_DEVELOPMENT_ACQUISITION",
     )
 
     receipt = {
