@@ -5,7 +5,11 @@ from pathlib import Path
 
 import yaml
 
-from scripts.acquire_euroc_development import _extract_source, _reader_path
+from scripts.acquire_euroc_development import (
+    _extract_source,
+    _member_relative_to_sequence,
+    _reader_path,
+)
 from scripts.convert_euroc_rosbag import _sha256, _source_bytes
 from shield_vio.datasets.splits import load_paper_split
 
@@ -52,6 +56,8 @@ def test_development_source_registry_contains_no_test_sequences() -> None:
         split.assert_run_membership("euroc", sequence, entry["split"])
         assert entry["source_kind"] == "openvins_google_drive_rosbag2"
         assert entry["google_drive_file_id"]
+        assert entry["fallback"]["source_kind"] == "huggingface_aggregate_zip_range"
+        assert entry["fallback"]["url"].startswith("https://huggingface.co/")
 
 
 def test_archive_extraction_rejects_path_traversal(tmp_path: Path) -> None:
@@ -65,3 +71,27 @@ def test_archive_extraction_rejects_path_traversal(tmp_path: Path) -> None:
         assert "escapes destination" in str(exc)
     else:
         raise AssertionError("unsafe archive path was not rejected")
+
+
+def test_sequence_member_matching_is_root_prefix_independent() -> None:
+    assert (
+        _member_relative_to_sequence(
+            "machine_hall/MH_02_easy/mav0/cam0/data/123.png",
+            "MH_02_easy",
+        )
+        == "mav0/cam0/data/123.png"
+    )
+    assert (
+        _member_relative_to_sequence(
+            "MH_02_easy/mav0/imu0/data.csv",
+            "MH_02_easy",
+        )
+        == "mav0/imu0/data.csv"
+    )
+    assert (
+        _member_relative_to_sequence(
+            "machine_hall/MH_03_medium/mav0/imu0/data.csv",
+            "MH_02_easy",
+        )
+        is None
+    )
