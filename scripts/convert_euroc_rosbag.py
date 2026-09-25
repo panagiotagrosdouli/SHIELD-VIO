@@ -247,6 +247,7 @@ def convert_rosbag(
     openvins_imucam_calibration: Path,
     openvins_imu_calibration: Path,
     openvins_revision: str,
+    evidence_scope: str = "PUBLIC_DATASET_SMOKE_ACQUISITION",
 ) -> dict[str, Any]:
     """Convert cam0 and imu0 from one EuRoC ROS1/ROS2 bag into a minimal ASL directory."""
 
@@ -373,7 +374,7 @@ def convert_rosbag(
         "schema_version": "SHIELD_VIO_EUROC_PORTABLE_ACQUISITION_V1",
         "dataset": "EuRoC_MAV",
         "sequence": sequence,
-        "evidence_scope": "PUBLIC_DATASET_SMOKE_ACQUISITION",
+        "evidence_scope": evidence_scope,
         "confirmatory_identity": False,
         "claim_boundary": (
             "Portable CI acquisition from a checksum-verified ROS bag mirror plus pinned OpenVINS "
@@ -415,6 +416,10 @@ def main() -> None:
     parser.add_argument("--openvins-imucam-calibration", type=Path, required=True)
     parser.add_argument("--openvins-imu-calibration", type=Path, required=True)
     parser.add_argument("--openvins-revision", required=True)
+    parser.add_argument(
+        "--evidence-scope",
+        default="PUBLIC_DATASET_SMOKE_ACQUISITION",
+    )
     args = parser.parse_args()
 
     manifest = convert_rosbag(
@@ -427,6 +432,7 @@ def main() -> None:
         openvins_imucam_calibration=args.openvins_imucam_calibration,
         openvins_imu_calibration=args.openvins_imu_calibration,
         openvins_revision=args.openvins_revision,
+        evidence_scope=args.evidence_scope,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
 
