@@ -17,7 +17,7 @@ sequences:
     fallback:
       source_kind: huggingface_aggregate_zip_range
       url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/machine_hall.zip?download=true
-      expected_subset_sha256: null
+      expected_subset_sha256: bea2661637a1aef840ebf7fd899b3ddc9881b728d48356a138f05578202e4ed8
   V1_01_easy:
     split: train
     source_kind: openvins_google_drive_rosbag2
