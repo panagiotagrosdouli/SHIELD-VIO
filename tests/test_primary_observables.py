@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from shield_vio.evaluation.primary_observables import (
     PRIMARY_CRITERIA,
@@ -146,7 +147,7 @@ def test_primary_observable_export_computes_available_criteria(tmp_path: Path) -
     assert np.nanmax(np.abs(table.values["orientation_error_deg"])) < 1e-9
     assert np.nanmax(np.abs(table.values["translation_rpe_1s_m"])) < 1e-9
     assert np.nanmax(np.abs(table.values["rotation_rpe_1s_deg"])) < 1e-9
-    assert table.values["output_starvation"][6] == 0.6
+    assert table.values["output_starvation"][6] == pytest.approx(0.6)
     assert bool(table.values["terminal_tracking_loss"][7])
     assert np.all(table.observable["terminal_tracking_loss"])
     assert np.all(table.observable["invalid_pose_or_covariance"])
