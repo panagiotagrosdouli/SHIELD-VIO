@@ -8,7 +8,7 @@ The Phase B target is
 
 where `T_failure` is the first qualifying observable failure onset and the feature state at `t` may use only information available at or before `t`.
 
-The frozen primary configuration is `configs/paper/failure_primary_v1.yaml` with schema version `SHIELD_VIO_FAILURE_V1`. Primary horizons are 0.5, 1.0, 2.0, 3.0, and 5.0 seconds.
+The current frozen primary configuration is `configs/paper/failure_primary_v2.yaml` with schema version `SHIELD_VIO_FAILURE_V2`. V2 supersedes V1 before confirmatory test inspection by freezing the previously unspecified causal IMU motion gate and explicit backend-criterion applicability semantics. Primary horizons remain 0.5, 1.0, 2.0, 3.0, and 5.0 seconds.
 
 ## Pipeline
 
