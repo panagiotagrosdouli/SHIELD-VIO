@@ -9,7 +9,9 @@ on:
       - 'scripts/run_paper_vertical_slice.py'
       - 'scripts/validate_public_smoke.py'
       - 'scripts/convert_euroc_rosbag.py'
+      - 'scripts/export_primary_observables.py'
       - 'tests/test_validate_public_smoke.py'
+      - 'tests/test_primary_observables.py'
       - 'tests/test_convert_euroc_rosbag.py'
       - 'pyproject.toml'
       - 'configs/paper/vertical_slice_smoke.yaml'
@@ -22,6 +24,7 @@ on:
       - 'scripts/compare_real_euroc_runs.py'
       - 'scripts/validate_public_smoke.py'
       - 'scripts/convert_euroc_rosbag.py'
+      - 'scripts/export_primary_observables.py'
       - 'pyproject.toml'
       - '.github/workflows/real-euroc-paired.yml'
 
@@ -185,6 +188,14 @@ jobs:
           python scripts/run_euroc.py data/euroc/MH_01_easy \
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
+
+      - name: Audit primary failure observables
+        run: |
+          python scripts/export_primary_observables.py \
+            --run-dir results/real_euroc/MH_01_easy/opencv_rotation \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/primary_observables
+          cat results/real_euroc/MH_01_easy/primary_observables/primary_observable_audit.json
 
       - name: Build paired comparison
         run: |
