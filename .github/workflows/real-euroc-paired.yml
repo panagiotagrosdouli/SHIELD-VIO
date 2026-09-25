@@ -8,7 +8,10 @@ on:
       - 'scripts/run_euroc.py'
       - 'scripts/run_paper_vertical_slice.py'
       - 'scripts/validate_public_smoke.py'
+      - 'scripts/convert_euroc_rosbag.py'
       - 'tests/test_validate_public_smoke.py'
+      - 'tests/test_convert_euroc_rosbag.py'
+      - 'pyproject.toml'
       - 'configs/paper/vertical_slice_smoke.yaml'
       - '.github/workflows/real-euroc-paired.yml'
   push:
@@ -18,74 +21,86 @@ on:
       - 'scripts/run_euroc.py'
       - 'scripts/compare_real_euroc_runs.py'
       - 'scripts/validate_public_smoke.py'
+      - 'scripts/convert_euroc_rosbag.py'
+      - 'pyproject.toml'
       - '.github/workflows/real-euroc-paired.yml'
 
 jobs:
   mh01-paired:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e '.[dev]'
-      - name: Download EuRoC MH_01_easy ASL sequence
+      - run: python -m pip install -e '.[dev,dataset]'
+
+      - name: Restore portable EuRoC bag cache
+        uses: actions/cache@v4
+        with:
+          path: data/euroc/MH_01_easy.bag
+          key: euroc-mh01-rosbag-57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9
+
+      - name: Acquire EuRoC MH_01_easy
         env:
           EUROC_HTTPS_URL: https://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip
           EUROC_HTTP_URL: http://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip
+          EUROC_BAG_MIRROR_URL: https://huggingface.co/datasets/kavehsgh/EuRoC_MAV_Dataset_Machine_Hall_Easy_01/resolve/main/MH_01_easy.bag?download=true
+          EUROC_BAG_SHA256: 57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9
+          OPENVINS_REVISION: 69488123ed9362dd44b6f28e7f4680abbff1442b
         run: |
           set -euo pipefail
           mkdir -p data/euroc results/real_euroc/MH_01_easy
           archive=data/euroc/MH_01_easy.zip
-          source_url="$EUROC_HTTPS_URL"
-          if ! curl \
-            --fail \
-            --location \
-            --proto '=https' \
-            --retry 2 \
-            --retry-all-errors \
-            --retry-delay 3 \
-            --connect-timeout 15 \
-            --max-time 300 \
-            --output "$archive" \
-            "$EUROC_HTTPS_URL"; then
-            echo "HTTPS download failed; retrying the same official ETH archive over HTTP."
+          sequence_root=data/euroc/MH_01_easy
+          acquisition_mode=""
+          source_url=""
+
+          if curl \
+            --fail --location --proto '=https' \
+            --retry 2 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 15 --max-time 300 \
+            --output "$archive" "$EUROC_HTTPS_URL"; then
+            acquisition_mode="official_eth_legacy_https_zip"
+            source_url="$EUROC_HTTPS_URL"
+          else
+            echo "Legacy ETH HTTPS endpoint unavailable; trying legacy HTTP."
             rm -f "$archive"
-            source_url="$EUROC_HTTP_URL"
-            curl \
-              --fail \
-              --location \
-              --proto '=http' \
-              --retry 4 \
-              --retry-all-errors \
-              --retry-delay 5 \
-              --connect-timeout 20 \
-              --max-time 600 \
-              --output "$archive" \
-              "$EUROC_HTTP_URL"
+            if curl \
+              --fail --location --proto '=http' \
+              --retry 2 --retry-all-errors --retry-delay 3 \
+              --connect-timeout 15 --max-time 300 \
+              --output "$archive" "$EUROC_HTTP_URL"; then
+              acquisition_mode="official_eth_legacy_http_zip"
+              source_url="$EUROC_HTTP_URL"
+            fi
           fi
-          unzip -tq "$archive"
-          archive_sha256="$(sha256sum "$archive" | awk '{print $1}')"
-          archive_bytes="$(stat -c '%s' "$archive")"
-          SOURCE_URL="$source_url" ARCHIVE_SHA256="$archive_sha256" ARCHIVE_BYTES="$archive_bytes" \
-            python - <<'PY'
+
+          if [[ -n "$acquisition_mode" ]]; then
+            unzip -tq "$archive"
+            archive_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+            archive_bytes="$(stat -c '%s' "$archive")"
+            rm -rf "$sequence_root"
+            unzip -q "$archive" -d "$sequence_root"
+            SOURCE_URL="$source_url" ARCHIVE_SHA256="$archive_sha256" ARCHIVE_BYTES="$archive_bytes" \
+              ACQUISITION_MODE="$acquisition_mode" python - <<'PY'
           import json
           import os
           from pathlib import Path
 
           receipt = {
-              "schema_version": 1,
+              "schema_version": 2,
               "dataset": "EuRoC_MAV",
               "sequence": "MH_01_easy",
-              "archive_name": "MH_01_easy.zip",
               "source_url": os.environ["SOURCE_URL"],
-              "archive_sha256": os.environ["ARCHIVE_SHA256"],
-              "archive_bytes": int(os.environ["ARCHIVE_BYTES"]),
-              "source_policy": "official_eth_https_then_official_eth_http_fallback",
+              "source_sha256": os.environ["ARCHIVE_SHA256"],
+              "source_bytes": int(os.environ["ARCHIVE_BYTES"]),
+              "acquisition_mode": os.environ["ACQUISITION_MODE"],
+              "confirmatory_identity": False,
               "claim_boundary": (
-                  "Download receipt for PUBLIC_DATASET_SMOKE. The exact archive checksum "
-                  "must be frozen before confirmatory dataset evaluation."
+                  "PUBLIC_DATASET_SMOKE acquisition. The current ETH Research Collection "
+                  "identity/checksum must be frozen separately before confirmatory evaluation."
               ),
           }
           Path("results/real_euroc/MH_01_easy/dataset_download_receipt.json").write_text(
@@ -94,22 +109,90 @@ jobs:
           )
           print(json.dumps(receipt, indent=2, sort_keys=True))
           PY
-          unzip -q "$archive" -d data/euroc/MH_01_easy
+          else
+            echo "Legacy ETH endpoints unavailable; using checksum-verified portable smoke mirror."
+            rm -f "$archive"
+            bag=data/euroc/MH_01_easy.bag
+            if [[ ! -f "$bag" ]]; then
+              curl \
+                --fail --location \
+                --retry 5 --retry-all-errors --retry-delay 5 \
+                --connect-timeout 30 --max-time 2400 \
+                --output "$bag" "$EUROC_BAG_MIRROR_URL"
+            fi
+            echo "$EUROC_BAG_SHA256  $bag" | sha256sum --check --strict
+
+            openvins_dir=data/euroc/openvins-pinned
+            mkdir -p "$openvins_dir"
+            openvins_base="https://raw.githubusercontent.com/rpng/open_vins/$OPENVINS_REVISION"
+            curl --fail --location --retry 4 \
+              --output "$openvins_dir/MH_01_easy.txt" \
+              "$openvins_base/ov_data/euroc_mav/MH_01_easy.txt"
+            curl --fail --location --retry 4 \
+              --output "$openvins_dir/kalibr_imucam_chain.yaml" \
+              "$openvins_base/config/euroc_mav/kalibr_imucam_chain.yaml"
+            curl --fail --location --retry 4 \
+              --output "$openvins_dir/kalibr_imu_chain.yaml" \
+              "$openvins_base/config/euroc_mav/kalibr_imu_chain.yaml"
+
+            rm -rf "$sequence_root"
+            python scripts/convert_euroc_rosbag.py "$bag" \
+              --output "$sequence_root" \
+              --sequence MH_01_easy \
+              --expected-bag-sha256 "$EUROC_BAG_SHA256" \
+              --source-url "$EUROC_BAG_MIRROR_URL" \
+              --openvins-ground-truth "$openvins_dir/MH_01_easy.txt" \
+              --openvins-imucam-calibration "$openvins_dir/kalibr_imucam_chain.yaml" \
+              --openvins-imu-calibration "$openvins_dir/kalibr_imu_chain.yaml" \
+              --openvins-revision "$OPENVINS_REVISION"
+
+            cp "$sequence_root/portable_acquisition_manifest.json" \
+              results/real_euroc/MH_01_easy/portable_acquisition_manifest.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          portable = json.loads(
+              Path("results/real_euroc/MH_01_easy/portable_acquisition_manifest.json")
+              .read_text(encoding="utf-8")
+          )
+          receipt = {
+              "schema_version": 2,
+              "dataset": "EuRoC_MAV",
+              "sequence": "MH_01_easy",
+              "source_url": portable["source"]["bag_url"],
+              "source_sha256": portable["source"]["bag_sha256"],
+              "source_bytes": portable["source"]["bag_bytes"],
+              "acquisition_mode": "checksum_verified_rosbag_mirror_plus_pinned_openvins",
+              "confirmatory_identity": False,
+              "claim_boundary": portable["claim_boundary"],
+          }
+          Path("results/real_euroc/MH_01_easy/dataset_download_receipt.json").write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(receipt, indent=2, sort_keys=True))
+          PY
+          fi
+
       - name: Run real IMU-only baseline
         run: |
           python scripts/run_euroc.py data/euroc/MH_01_easy \
             --output results/real_euroc/MH_01_easy/imu_only
+
       - name: Run real OpenCV rotation configuration
         run: |
           python scripts/run_euroc.py data/euroc/MH_01_easy \
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
+
       - name: Build paired comparison
         run: |
           python scripts/compare_real_euroc_runs.py \
             results/real_euroc/MH_01_easy/imu_only \
             results/real_euroc/MH_01_easy/opencv_rotation \
             --output results/real_euroc/MH_01_easy/comparison.json
+
       - name: Run public-data failure-prediction vertical slice
         run: |
           python scripts/run_paper_vertical_slice.py \
@@ -118,6 +201,7 @@ jobs:
             --output results/real_euroc/MH_01_easy/paper_vertical_slice \
             --config configs/paper/vertical_slice_smoke.yaml \
             --seed 7
+
       - name: Validate publication smoke evidence gate
         run: |
           python scripts/validate_public_smoke.py \
@@ -126,6 +210,7 @@ jobs:
             --expected-sequence MH_01_easy \
             --report results/real_euroc/MH_01_easy/paper_vertical_slice/smoke_validation.json
           cat results/real_euroc/MH_01_easy/paper_vertical_slice/smoke_validation.json
+
       - name: Upload real benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
