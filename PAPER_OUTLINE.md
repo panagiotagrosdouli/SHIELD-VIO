@@ -24,9 +24,13 @@ Artifact links: `{{FIGURE_SYSTEM_ARCHITECTURE}}`, `{{TABLE_CLAIM_EVIDENCE}}`.
 
 ## 3. Related Work
 
-Organize by visual-inertial odometry; estimator consistency; failure detection in SLAM/localization; uncertainty calibration; out-of-distribution detection; selective prediction/abstention; runtime assurance/safety shields; failure-aware robotics; recovery/relocalization.
+The working citation-backed draft is maintained in `paper/RELATED_WORK.md`, with BibTeX entries in `paper/references.bib` and claim-to-literature coverage in `docs/publication/LITERATURE_MATRIX.md`.
 
-End with a citation-backed novelty matrix using the columns in `CLAIM_EVIDENCE_MATRIX.md`. Do not claim novelty until each comparison cell is sourced and checked.
+Organize the final section around: (1) visual-inertial estimation and benchmark context; (2) introspection, failure prediction, and localization integrity; (3) probability calibration and conformal uncertainty; (4) out-of-distribution detection and selective prediction; and (5) runtime assurance and protective intervention.
+
+The novelty discussion must distinguish current-failure detection from future-horizon failure prediction, estimator robustness from a supervisory predictor, OOD detection from downstream policy utility, and empirical protection from formal safety guarantees.
+
+End with a citation-backed novelty matrix using the columns in `CLAIM_EVIDENCE_MATRIX.md`. Do not use “first,” “novel,” or equivalent priority language until every comparison cell and the open literature gaps in `docs/publication/LITERATURE_MATRIX.md` are sourced and checked.
 
 Placeholder: `{{TABLE_NOVELTY_MATRIX}}`.
 
