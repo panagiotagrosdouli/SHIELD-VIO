@@ -191,10 +191,6 @@ def run_public_dataset_smoke(
 
     eligible = dataset.targets.eligible_mask
     labels = dataset.targets.labels
-    eligible_labels = labels[eligible]
-    positive_windows = int(np.sum(eligible_labels))
-    negative_windows = int(np.sum(~eligible_labels))
-    discrimination_defined = positive_windows > 0 and negative_windows > 0
 
     method_metrics: dict[str, dict[str, Any]] = {}
     for method, method_scores in scores.items():
