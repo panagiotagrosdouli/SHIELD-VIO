@@ -1,0 +1,62 @@
+name: Freeze EuRoC development sources
+
+on:
+  pull_request:
+    paths:
+      - 'configs/paper/euroc_development_sources.yaml'
+      - 'scripts/acquire_euroc_development.py'
+      - 'scripts/convert_euroc_rosbag.py'
+      - 'pyproject.toml'
+      - '.github/workflows/euroc-development-source-freeze.yml'
+
+jobs:
+  freeze-source:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        sequence:
+          - V1_01_easy
+          - MH_03_medium
+          - V1_02_medium
+          - V2_01_easy
+          - V2_02_medium
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      SEQUENCE: ${{ matrix.sequence }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install acquisition dependencies
+        run: python -m pip install -e '.[dataset]'
+
+      - name: Acquire registered development source
+        run: |
+          python scripts/acquire_euroc_development.py \
+            --sequence "$SEQUENCE" \
+            --output "data/euroc/$SEQUENCE" \
+            --work-dir "data/euroc_sources/$SEQUENCE" \
+            --registry configs/paper/euroc_development_sources.yaml \
+            --split-config configs/paper/public_dataset_splits.yaml
+          cat "data/euroc/$SEQUENCE/development_acquisition_receipt.json"
+
+      - name: Preserve source receipt only
+        run: |
+          mkdir -p "results/source_freeze/$SEQUENCE"
+          cp "data/euroc/$SEQUENCE/development_acquisition_receipt.json" \
+            "results/source_freeze/$SEQUENCE/development_acquisition_receipt.json"
+          cp "data/euroc/$SEQUENCE/portable_acquisition_manifest.json" \
+            "results/source_freeze/$SEQUENCE/portable_acquisition_manifest.json"
+
+      - name: Upload source receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-vio-euroc-source-${{ matrix.sequence }}
+          path: results/source_freeze/${{ matrix.sequence }}
+          if-no-files-found: error
+          retention-days: 30
