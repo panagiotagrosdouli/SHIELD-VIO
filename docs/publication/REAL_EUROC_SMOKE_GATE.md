@@ -44,15 +44,15 @@ scripts/validate_public_smoke.py rejects the run when any of the following occur
 3. the manifest is incomplete;
 4. the real public sequence appears in train/calibration/validation;
 5. the smoke does not contain associated and eligible samples;
-6. either future-failure class is absent;
-7. no persistent failure event is observed;
+6. target-class counts disagree with the prediction table;
+7. the manifest incorrectly marks discrimination as defined/undefined;
 8. an expected artifact is absent;
 9. an artifact SHA-256 differs from the manifest;
 10. a causal feature uses a source timestamp later than its prediction timestamp;
 11. feature/prediction row counts disagree with the manifest;
 12. metric denominators disagree with prediction labels;
 13. a required smoke baseline is absent;
-14. AUROC/AUPRC is non-finite or outside [0,1];
+14. AUROC/AUPRC is missing/invalid when both classes exist, or is non-null when the run is single-class;
 15. raw and calibrated logistic predictions do not carry calibration diagnostics;
 16. the referenced estimator manifest is missing;
 17. the Git revision is not captured.
@@ -65,11 +65,14 @@ A passing run supports only these statements:
 - timestamped estimator health can be transformed into causal features;
 - privileged ground truth is used only in the offline label/evaluation path;
 - persistent future-event labels can be constructed for a real public sequence;
-- heuristic and learned scores can be evaluated on real sensor-derived health data;
+- heuristic and learned scores can be executed on real sensor-derived health data;
 - calibration/reliability artifacts and prediction timelines can be generated;
+- a no-failure sequence can be retained as valid negative pipeline evidence without inventing AUROC/AUPRC;
 - artifact provenance and hashes are sufficient for a reproducible smoke bundle.
 
 ## What this smoke cannot establish
+
+A smoke sequence containing only one future-failure class is retained. Its manifest records `discrimination_defined=false`; AUROC/AUPRC are serialized as null and cannot be cited as discrimination evidence.
 
 It cannot establish:
 
