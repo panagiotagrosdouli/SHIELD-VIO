@@ -410,18 +410,33 @@ def build_primary_observables(
 
     tracking_values = np.zeros(len(timestamps), dtype=bool)
     tracking_observable = np.zeros(len(timestamps), dtype=bool)
+    tracking_applicable = np.ones(len(timestamps), dtype=bool)
     lost_states = {"lost", "terminal", "failed", "tracking_lost"}
+    tracking_criterion = _criterion(failure_definition, "terminal_tracking_loss")
+    support_text = [
+        str(row.get("terminal_tracking_loss_observable", "")).strip() for row in health
+    ]
+    if all(text in {"0", "1"} for text in support_text):
+        support = np.asarray([bool(int(text)) for text in support_text], dtype=bool)
+        if np.any(support) and not np.all(support):
+            raise ValueError("terminal tracking-loss capability must be constant within a run")
+        if (
+            not np.any(support)
+            and tracking_criterion is not None
+            and tracking_criterion.applicability == "backend_declared"
+            and tracking_criterion.explicitly_unsupported_policy == "not_applicable"
+        ):
+            tracking_applicable[:] = False
+        else:
+            tracking_observable = support.copy()
     for index, row in enumerate(health):
-        status = str(row.get("tracking_status", "")).strip().lower()
-        observable_text = str(row.get("terminal_tracking_loss_observable", "")).strip()
-        if not status or observable_text == "":
+        if not tracking_applicable[index] or not tracking_observable[index]:
             continue
-        try:
-            tracking_observable[index] = bool(int(observable_text))
-        except ValueError as exc:
-            raise ValueError("terminal_tracking_loss_observable must be 0 or 1") from exc
-        if tracking_observable[index]:
-            tracking_values[index] = status in lost_states
+        status = str(row.get("tracking_status", "")).strip().lower()
+        if not status:
+            tracking_observable[index] = False
+            continue
+        tracking_values[index] = status in lost_states
 
     reset_relocalization = np.zeros(len(timestamps), dtype=bool)
     reset_observable = np.ones(len(timestamps), dtype=bool)
@@ -433,11 +448,17 @@ def build_primary_observables(
         else:
             reset_relocalization[index] = bool(int(reset)) or bool(int(relocalization))
 
-    # The frozen primary definition requires a motion gate for this criterion, but
-    # no motion-gate thresholds are yet versioned. It is therefore deliberately
-    # unavailable instead of being assumed false.
-    visual_starvation = np.full(len(timestamps), np.nan, dtype=float)
-    visual_starvation_observable = np.zeros(len(timestamps), dtype=bool)
+    (
+        visual_starvation,
+        visual_starvation_observable,
+        visual_starvation_applicable,
+        visual_starvation_source,
+    ) = _visual_starvation_observable(
+        run,
+        sequence,
+        timestamps,
+        failure_definition,
+    )
 
     values: dict[str, np.ndarray] = {
         "position_error_m": position_error,
@@ -461,6 +482,18 @@ def build_primary_observables(
         "visual_update_starvation_while_motion": visual_starvation_observable,
         "estimator_reset_or_unrecovered_relocalization": reset_observable,
     }
+    always_applicable = np.ones(len(timestamps), dtype=bool)
+    applicable: dict[str, np.ndarray] = {
+        "position_error_m": always_applicable.copy(),
+        "orientation_error_deg": always_applicable.copy(),
+        "translation_rpe_1s_m": always_applicable.copy(),
+        "rotation_rpe_1s_deg": always_applicable.copy(),
+        "invalid_pose_or_covariance": always_applicable.copy(),
+        "output_starvation": always_applicable.copy(),
+        "terminal_tracking_loss": tracking_applicable,
+        "visual_update_starvation_while_motion": visual_starvation_applicable,
+        "estimator_reset_or_unrecovered_relocalization": always_applicable.copy(),
+    }
     sources = {
         "position_error_m": "trajectory.csv + EuRoC ground truth + global SE(3) alignment",
         "orientation_error_deg": "trajectory.csv + EuRoC ground truth + alignment rotation",
@@ -471,12 +504,12 @@ def build_primary_observables(
         "terminal_tracking_loss": (
             "health.csv tracking_status gated by terminal_tracking_loss_observable"
         ),
-        "visual_update_starvation_while_motion": "NOT_OBSERVABLE: motion gate not frozen",
+        "visual_update_starvation_while_motion": visual_starvation_source,
         "estimator_reset_or_unrecovered_relocalization": (
             "health.csv reset_event OR relocalization_event"
         ),
     }
-    return PrimaryObservableTable(timestamps, values, observable, sources)
+    return PrimaryObservableTable(timestamps, values, observable, applicable, sources)
 
 
 def write_primary_observable_artifacts(
