@@ -73,6 +73,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path]:
                 2.0,
                 1e-4,
                 0.0,
+                1,
                 0,
                 0,
             ]
@@ -115,6 +116,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path]:
             "innovation_nis",
             "covariance_min_eigenvalue",
             "covariance_symmetry_error",
+            "terminal_tracking_loss_observable",
             "reset_event",
             "relocalization_event",
         ],
@@ -146,6 +148,7 @@ def test_primary_observable_export_computes_available_criteria(tmp_path: Path) -
     assert np.nanmax(np.abs(table.values["rotation_rpe_1s_deg"])) < 1e-9
     assert table.values["output_starvation"][6] == 0.6
     assert bool(table.values["terminal_tracking_loss"][7])
+    assert np.all(table.observable["terminal_tracking_loss"])
     assert np.all(table.observable["invalid_pose_or_covariance"])
     assert not np.any(table.observable["visual_update_starvation_while_motion"])
 
