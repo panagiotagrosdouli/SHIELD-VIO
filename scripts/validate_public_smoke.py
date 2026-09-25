@@ -69,7 +69,11 @@ def _require_sha256(value: object, field: str) -> None:
         raise ValueError(f"{field} is not a SHA-256 hex digest")
 
 
-def _require_probability_metric(value: object, field: str) -> None:
+def _require_discrimination_metric(value: object, field: str, *, defined: bool) -> None:
+    if not defined:
+        if value is not None:
+            raise ValueError(f"{field} must be null when discrimination is undefined")
+        return
     number = float(value)
     if not math.isfinite(number) or not 0.0 <= number <= 1.0:
         raise ValueError(f"{field} must be finite and in [0, 1]")
@@ -135,8 +139,10 @@ def validate_smoke(
     positive = int(counts.get("positive_windows", 0))
     negative = int(counts.get("negative_windows", 0))
     events = int(counts.get("failure_events", 0))
-    if min(associated, eligible, positive, negative, events) <= 0:
-        raise ValueError("smoke evidence requires associated/eligible rows, both classes, and events")
+    if associated <= 0 or eligible <= 0:
+        raise ValueError("smoke evidence requires associated and eligible rows")
+    if min(positive, negative, events) < 0:
+        raise ValueError("smoke class/event counts cannot be negative")
     if positive + negative != eligible:
         raise ValueError("positive_windows + negative_windows must equal eligible")
     if eligible > associated:
@@ -180,6 +186,17 @@ def validate_smoke(
     if len(eligible_rows) - observed_positive != negative:
         raise ValueError("negative future-failure count disagrees with manifest")
 
+    expected_discrimination = positive > 0 and negative > 0
+    if manifest.get("discrimination_defined") is not expected_discrimination:
+        raise ValueError("manifest discrimination_defined disagrees with observed target classes")
+    expected_target_status = (
+        "TWO_CLASS"
+        if expected_discrimination
+        else ("SINGLE_CLASS_POSITIVE" if positive > 0 else "SINGLE_CLASS_NEGATIVE")
+    )
+    if manifest.get("target_status") != expected_target_status:
+        raise ValueError("manifest target_status disagrees with observed target classes")
+
     metrics = _load_json(output_dir / "metrics.json")
     missing_methods = sorted(REQUIRED_METHODS - set(metrics))
     if missing_methods:
@@ -188,8 +205,14 @@ def validate_smoke(
         payload = metrics[method]
         if not isinstance(payload, dict):
             raise ValueError(f"metrics for {method} must be an object")
-        _require_probability_metric(payload.get("auroc"), f"{method}.auroc")
-        _require_probability_metric(payload.get("auprc"), f"{method}.auprc")
+        if payload.get("discrimination_defined") is not expected_discrimination:
+            raise ValueError(f"{method} discrimination_defined disagrees with manifest")
+        _require_discrimination_metric(
+            payload.get("auroc"), f"{method}.auroc", defined=expected_discrimination
+        )
+        _require_discrimination_metric(
+            payload.get("auprc"), f"{method}.auprc", defined=expected_discrimination
+        )
         if int(payload.get("eligible_samples", -1)) != eligible:
             raise ValueError(f"{method} eligible_samples disagrees with manifest")
         if int(payload.get("positive_windows", -1)) != positive:
@@ -222,6 +245,8 @@ def validate_smoke(
         "positive_windows": positive,
         "negative_windows": negative,
         "failure_events": events,
+        "discrimination_defined": expected_discrimination,
+        "target_status": expected_target_status,
         "validated_artifact_count": len(REQUIRED_ARTIFACTS),
         "causal_provenance_checked": True,
         "artifact_hashes_checked": True,
