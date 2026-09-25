@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 
 from shield_vio.core.math import quat_to_rot
+from shield_vio.datasets.euroc import read_imu_samples
+from shield_vio.evaluation.failure_definition import FailureDefinition
 from shield_vio.evaluation.trajectory_metrics import align_positions_se3
 
 
@@ -32,6 +34,7 @@ class PrimaryObservableTable:
     timestamps_ns: np.ndarray
     values: dict[str, np.ndarray]
     observable: dict[str, np.ndarray]
+    applicable: dict[str, np.ndarray]
     sources: dict[str, str]
 
     def __post_init__(self) -> None:
@@ -42,6 +45,8 @@ class PrimaryObservableTable:
             raise ValueError("primary observable value keys do not match frozen criteria")
         if set(self.observable) != set(PRIMARY_CRITERIA):
             raise ValueError("primary observable masks do not match frozen criteria")
+        if set(self.applicable) != set(PRIMARY_CRITERIA):
+            raise ValueError("primary observable applicability masks do not match frozen criteria")
         if set(self.sources) != set(PRIMARY_CRITERIA):
             raise ValueError("primary observable sources do not match frozen criteria")
         for name in PRIMARY_CRITERIA:
@@ -49,6 +54,13 @@ class PrimaryObservableTable:
                 raise ValueError(f"observable value shape mismatch: {name}")
             if np.asarray(self.observable[name], dtype=bool).shape != timestamps.shape:
                 raise ValueError(f"observable mask shape mismatch: {name}")
+            if np.asarray(self.applicable[name], dtype=bool).shape != timestamps.shape:
+                raise ValueError(f"applicability mask shape mismatch: {name}")
+            if np.any(
+                np.asarray(self.observable[name], dtype=bool)
+                & ~np.asarray(self.applicable[name], dtype=bool)
+            ):
+                raise ValueError(f"criterion cannot be observable where it is not applicable: {name}")
 
 
 def _dict_rows(path: Path) -> list[dict[str, str]]:
@@ -156,6 +168,121 @@ def _one_second_predecessors(
     return selected.astype(int), valid
 
 
+def _criterion(definition: FailureDefinition | None, name: str):
+    if definition is None:
+        return None
+    matches = [criterion for criterion in definition.criteria if criterion.name == name]
+    if len(matches) != 1:
+        raise ValueError(f"failure definition must declare criterion exactly once: {name}")
+    return matches[0]
+
+
+def _optional_csv_rows(path: Path) -> tuple[list[dict[str, str]], tuple[str, ...]]:
+    if not path.is_file():
+        return [], ()
+    with path.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        fieldnames = tuple(reader.fieldnames or ())
+        return list(reader), fieldnames
+
+
+def _visual_starvation_observable(
+    run: Path,
+    sequence: Path,
+    timestamps: np.ndarray,
+    definition: FailureDefinition | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
+    values = np.full(len(timestamps), np.nan, dtype=float)
+    observable = np.zeros(len(timestamps), dtype=bool)
+    applicable = np.ones(len(timestamps), dtype=bool)
+    criterion = _criterion(definition, "visual_update_starvation_while_motion")
+
+    manifest_path = run / "experiment_manifest.json"
+    if not manifest_path.is_file():
+        return values, observable, applicable, "NOT_OBSERVABLE: estimator manifest missing"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provider = manifest.get("visual_provider")
+    if provider in {None, "", "none"}:
+        if (
+            criterion is not None
+            and criterion.applicability == "visual_update_stream"
+            and criterion.explicitly_unsupported_policy == "not_applicable"
+        ):
+            applicable[:] = False
+            return (
+                values,
+                observable,
+                applicable,
+                "NOT_APPLICABLE: run declares no visual-update provider",
+            )
+        return values, observable, applicable, "NOT_OBSERVABLE: visual-update provider unknown"
+
+    if definition is None or definition.imu_motion_gate is None:
+        return values, observable, applicable, "NOT_OBSERVABLE: versioned IMU motion gate missing"
+    gate = definition.imu_motion_gate
+
+    update_rows, update_fields = _optional_csv_rows(run / "visual_updates.csv")
+    if not update_fields or "frame_timestamp_ns" not in update_fields:
+        return values, observable, applicable, "NOT_OBSERVABLE: visual update log missing"
+    accepted_ns = np.asarray(
+        [int(row["frame_timestamp_ns"]) for row in update_rows], dtype=np.int64
+    )
+    if len(accepted_ns) and np.any(np.diff(accepted_ns) <= 0):
+        raise ValueError("visual update timestamps must be strictly increasing")
+
+    imu = read_imu_samples(sequence)
+    imu_ns = np.asarray([sample.timestamp_ns for sample in imu], dtype=np.int64)
+    gyro_norm = np.asarray(
+        [np.linalg.norm(sample.angular_velocity_rad_s) for sample in imu], dtype=float
+    )
+    accel_deviation = np.asarray(
+        [
+            abs(np.linalg.norm(sample.linear_acceleration_m_s2) - gate.gravity_m_s2)
+            for sample in imu
+        ],
+        dtype=float,
+    )
+    if np.any(~np.isfinite(gyro_norm)) or np.any(~np.isfinite(accel_deviation)):
+        raise ValueError("IMU motion-gate inputs must be finite")
+
+    window_ns = int(round(gate.window_seconds * 1e9))
+    left = np.searchsorted(imu_ns, timestamps - window_ns, side="right")
+    right = np.searchsorted(imu_ns, timestamps, side="right")
+    motion = np.zeros(len(timestamps), dtype=bool)
+    motion_observable = np.zeros(len(timestamps), dtype=bool)
+    for index, (start, stop) in enumerate(zip(left, right, strict=True)):
+        if stop <= start:
+            continue
+        gyro_rms = float(np.sqrt(np.mean(np.square(gyro_norm[start:stop]))))
+        accel_rms = float(np.sqrt(np.mean(np.square(accel_deviation[start:stop]))))
+        motion[index] = (
+            gyro_rms > gate.gyroscope_rms_threshold_rad_s
+            or accel_rms > gate.accelerometer_norm_deviation_rms_threshold_m_s2
+        )
+        motion_observable[index] = True
+
+    last_update_ns = int(timestamps[0])
+    update_index = 0
+    for index, timestamp in enumerate(timestamps):
+        while update_index < len(accepted_ns) and accepted_ns[update_index] <= timestamp:
+            last_update_ns = int(accepted_ns[update_index])
+            update_index += 1
+        if not motion_observable[index]:
+            continue
+        observable[index] = True
+        if motion[index]:
+            values[index] = max(0.0, float(timestamp - last_update_ns) * 1e-9)
+        else:
+            values[index] = 0.0
+
+    source = (
+        f"visual_updates.csv + trailing {gate.window_seconds:g}s IMU RMS motion gate "
+        f"({gate.schema_version}; gyro>{gate.gyroscope_rms_threshold_rad_s:g} rad/s OR "
+        f"|a|-g RMS>{gate.accelerometer_norm_deviation_rms_threshold_m_s2:g} m/s^2)"
+    )
+    return values, observable, applicable, source
+
+
 def build_primary_observables(
     run_dir: str | Path,
     sequence_root: str | Path,
@@ -165,6 +292,7 @@ def build_primary_observables(
     rpe_pair_tolerance_seconds: float = 0.075,
     covariance_psd_tolerance: float = 1e-9,
     covariance_symmetry_tolerance: float = 1e-9,
+    failure_definition: FailureDefinition | None = None,
 ) -> PrimaryObservableTable:
     """Build all currently defensible primary failure observations.
 
@@ -282,18 +410,33 @@ def build_primary_observables(
 
     tracking_values = np.zeros(len(timestamps), dtype=bool)
     tracking_observable = np.zeros(len(timestamps), dtype=bool)
+    tracking_applicable = np.ones(len(timestamps), dtype=bool)
     lost_states = {"lost", "terminal", "failed", "tracking_lost"}
+    tracking_criterion = _criterion(failure_definition, "terminal_tracking_loss")
+    support_text = [
+        str(row.get("terminal_tracking_loss_observable", "")).strip() for row in health
+    ]
+    if all(text in {"0", "1"} for text in support_text):
+        support = np.asarray([bool(int(text)) for text in support_text], dtype=bool)
+        if np.any(support) and not np.all(support):
+            raise ValueError("terminal tracking-loss capability must be constant within a run")
+        if (
+            not np.any(support)
+            and tracking_criterion is not None
+            and tracking_criterion.applicability == "backend_declared"
+            and tracking_criterion.explicitly_unsupported_policy == "not_applicable"
+        ):
+            tracking_applicable[:] = False
+        else:
+            tracking_observable = support.copy()
     for index, row in enumerate(health):
-        status = str(row.get("tracking_status", "")).strip().lower()
-        observable_text = str(row.get("terminal_tracking_loss_observable", "")).strip()
-        if not status or observable_text == "":
+        if not tracking_applicable[index] or not tracking_observable[index]:
             continue
-        try:
-            tracking_observable[index] = bool(int(observable_text))
-        except ValueError as exc:
-            raise ValueError("terminal_tracking_loss_observable must be 0 or 1") from exc
-        if tracking_observable[index]:
-            tracking_values[index] = status in lost_states
+        status = str(row.get("tracking_status", "")).strip().lower()
+        if not status:
+            tracking_observable[index] = False
+            continue
+        tracking_values[index] = status in lost_states
 
     reset_relocalization = np.zeros(len(timestamps), dtype=bool)
     reset_observable = np.ones(len(timestamps), dtype=bool)
@@ -305,11 +448,17 @@ def build_primary_observables(
         else:
             reset_relocalization[index] = bool(int(reset)) or bool(int(relocalization))
 
-    # The frozen primary definition requires a motion gate for this criterion, but
-    # no motion-gate thresholds are yet versioned. It is therefore deliberately
-    # unavailable instead of being assumed false.
-    visual_starvation = np.full(len(timestamps), np.nan, dtype=float)
-    visual_starvation_observable = np.zeros(len(timestamps), dtype=bool)
+    (
+        visual_starvation,
+        visual_starvation_observable,
+        visual_starvation_applicable,
+        visual_starvation_source,
+    ) = _visual_starvation_observable(
+        run,
+        sequence,
+        timestamps,
+        failure_definition,
+    )
 
     values: dict[str, np.ndarray] = {
         "position_error_m": position_error,
@@ -333,6 +482,18 @@ def build_primary_observables(
         "visual_update_starvation_while_motion": visual_starvation_observable,
         "estimator_reset_or_unrecovered_relocalization": reset_observable,
     }
+    always_applicable = np.ones(len(timestamps), dtype=bool)
+    applicable: dict[str, np.ndarray] = {
+        "position_error_m": always_applicable.copy(),
+        "orientation_error_deg": always_applicable.copy(),
+        "translation_rpe_1s_m": always_applicable.copy(),
+        "rotation_rpe_1s_deg": always_applicable.copy(),
+        "invalid_pose_or_covariance": always_applicable.copy(),
+        "output_starvation": always_applicable.copy(),
+        "terminal_tracking_loss": tracking_applicable,
+        "visual_update_starvation_while_motion": visual_starvation_applicable,
+        "estimator_reset_or_unrecovered_relocalization": always_applicable.copy(),
+    }
     sources = {
         "position_error_m": "trajectory.csv + EuRoC ground truth + global SE(3) alignment",
         "orientation_error_deg": "trajectory.csv + EuRoC ground truth + alignment rotation",
@@ -343,12 +504,12 @@ def build_primary_observables(
         "terminal_tracking_loss": (
             "health.csv tracking_status gated by terminal_tracking_loss_observable"
         ),
-        "visual_update_starvation_while_motion": "NOT_OBSERVABLE: motion gate not frozen",
+        "visual_update_starvation_while_motion": visual_starvation_source,
         "estimator_reset_or_unrecovered_relocalization": (
             "health.csv reset_event OR relocalization_event"
         ),
     }
-    return PrimaryObservableTable(timestamps, values, observable, sources)
+    return PrimaryObservableTable(timestamps, values, observable, applicable, sources)
 
 
 def write_primary_observable_artifacts(
@@ -362,7 +523,7 @@ def write_primary_observable_artifacts(
         writer = csv.writer(stream)
         columns = ["timestamp_ns"]
         for name in PRIMARY_CRITERIA:
-            columns.extend([name, f"{name}__observable"])
+            columns.extend([name, f"{name}__observable", f"{name}__applicable"])
         writer.writerow(columns)
         for index, timestamp in enumerate(table.timestamps_ns):
             row: list[object] = [int(timestamp)]
@@ -373,32 +534,49 @@ def write_primary_observable_artifacts(
                 else:
                     numeric = float(value)
                     serialized = "" if not np.isfinite(numeric) else numeric
-                row.extend([serialized, int(table.observable[name][index])])
+                row.extend(
+                    [
+                        serialized,
+                        int(table.observable[name][index]),
+                        int(table.applicable[name][index]),
+                    ]
+                )
             writer.writerow(row)
 
     criteria: dict[str, Any] = {}
     blocking: list[str] = []
     for name in PRIMARY_CRITERIA:
-        mask = np.asarray(table.observable[name], dtype=bool)
-        count = int(np.sum(mask))
-        if count == 0:
+        observable = np.asarray(table.observable[name], dtype=bool)
+        applicable = np.asarray(table.applicable[name], dtype=bool)
+        applicable_count = int(np.sum(applicable))
+        observable_count = int(np.sum(observable & applicable))
+        if applicable_count == 0:
+            status = "NOT_APPLICABLE"
+        elif observable_count == 0:
+            status = "NOT_OBSERVABLE"
             blocking.append(name)
+        else:
+            status = "OBSERVABLE"
         criteria[name] = {
-            "observable_samples": count,
-            "total_samples": len(mask),
-            "observable_fraction": count / len(mask),
+            "observable_samples": observable_count,
+            "applicable_samples": applicable_count,
+            "total_samples": len(observable),
+            "observable_fraction_of_applicable": (
+                observable_count / applicable_count if applicable_count else None
+            ),
             "source": table.sources[name],
-            "status": "NOT_OBSERVABLE" if count == 0 else "OBSERVABLE",
+            "status": status,
         }
     report = {
-        "schema_version": "SHIELD_VIO_PRIMARY_OBSERVABLE_AUDIT_V1",
+        "schema_version": "SHIELD_VIO_PRIMARY_OBSERVABLE_AUDIT_V2",
         "status": "BLOCKED" if blocking else "READY_FOR_PRIMARY_LABEL_BUILD",
         "sample_count": len(table.timestamps_ns),
         "criteria": criteria,
         "blocking_criteria": blocking,
         "claim_boundary": (
-            "Availability audit only. Primary SHIELD_VIO_FAILURE_V1 events must not be built "
-            "until every enabled criterion has a frozen observable implementation."
+            "Availability audit only. Primary SHIELD_VIO_FAILURE_V2 events may be built only "
+            "when every enabled criterion is observable where applicable or is explicitly "
+            "NOT_APPLICABLE under the frozen backend-capability policy."
         ),
     }
     (destination / "primary_observable_audit.json").write_text(

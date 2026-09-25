@@ -1,0 +1,103 @@
+schema_version: SHIELD_VIO_FAILURE_V2
+kind: primary
+persistence_seconds: 0.5
+event_merge_gap_seconds: 1.0
+recovery_confirmation_seconds: 1.0
+reaction_deadline_seconds: 0.5
+recovery_deadline_seconds: 5.0
+horizons_seconds: [0.5, 1.0, 2.0, 3.0, 5.0]
+
+# Causal trailing-window IMU motion gate used only by the
+# visual-update-starvation criterion. These engineering thresholds are fixed
+# before confirmatory test inspection and must be included in sensitivity analysis.
+imu_motion_gate:
+  schema_version: SHIELD_VIO_IMU_MOTION_GATE_V1
+  window_seconds: 0.25
+  gyroscope_rms_threshold_rad_s: 0.05
+  accelerometer_norm_deviation_rms_threshold_m_s2: 0.30
+  gravity_m_s2: 9.81
+  combination: any
+  threshold_origin: conservative_engineering_noise_margin
+  causal: true
+
+criteria:
+  position_error_m:
+    enabled: true
+    threshold: 1.0
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+    applicability: always
+  orientation_error_deg:
+    enabled: true
+    threshold: 15.0
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+    applicability: always
+  translation_rpe_1s_m:
+    enabled: true
+    threshold: 0.5
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+    applicability: always
+  rotation_rpe_1s_deg:
+    enabled: true
+    threshold: 10.0
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: true
+    applicability: always
+  invalid_pose_or_covariance:
+    enabled: true
+    comparison: true
+    persistence_seconds: 0.0
+    requires_ground_truth: false
+    applicability: always
+  output_starvation:
+    enabled: true
+    threshold_seconds: 0.5
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: false
+    applicability: always
+  terminal_tracking_loss:
+    enabled: true
+    comparison: true
+    persistence_seconds: 0.0
+    requires_ground_truth: false
+    applicability: backend_declared
+    explicitly_unsupported_policy: not_applicable
+  visual_update_starvation_while_motion:
+    enabled: true
+    threshold_seconds: 0.5
+    comparison: greater_than
+    persistence_seconds: 0.5
+    requires_ground_truth: false
+    applicability: visual_update_stream
+    explicitly_unsupported_policy: not_applicable
+  estimator_reset_or_unrecovered_relocalization:
+    enabled: true
+    comparison: true
+    persistence_seconds: 0.0
+    requires_ground_truth: false
+    applicability: backend_declared
+    explicitly_unsupported_policy: not_observable
+
+post_failure_policy: exclude_active_failure
+incomplete_tail_policy: censor
+current_time_in_future_interval: false
+
+availability_policy:
+  explicitly_unsupported_backend_criterion: not_applicable_only_when_declared
+  missing_instrumentation: not_observable
+  composite_label_requires:
+    - every_applicable_criterion_observable_at_sample
+  not_applicable_criteria_are_ignored_in_union: true
+
+sensitivity:
+  imu_motion_gate:
+    window_seconds: [0.10, 0.25, 0.50]
+    gyroscope_rms_threshold_rad_s: [0.025, 0.05, 0.10]
+    accelerometer_norm_deviation_rms_threshold_m_s2: [0.15, 0.30, 0.60]

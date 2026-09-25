@@ -24,6 +24,31 @@ class CriterionDefinition:
     requires_ground_truth: bool
     comparison: str
     threshold: float | None = None
+    applicability: str = "always"
+    explicitly_unsupported_policy: str = "not_observable"
+
+
+@dataclass(frozen=True)
+class ImuMotionGateDefinition:
+    schema_version: str
+    window_seconds: float
+    gyroscope_rms_threshold_rad_s: float
+    accelerometer_norm_deviation_rms_threshold_m_s2: float
+    gravity_m_s2: float
+    combination: str = "any"
+
+    def __post_init__(self) -> None:
+        if not self.schema_version:
+            raise ValueError("motion gate must be versioned")
+        if (
+            self.window_seconds <= 0
+            or self.gyroscope_rms_threshold_rad_s <= 0
+            or self.accelerometer_norm_deviation_rms_threshold_m_s2 <= 0
+            or self.gravity_m_s2 <= 0
+        ):
+            raise ValueError("motion-gate thresholds and window must be positive")
+        if self.combination != "any":
+            raise ValueError("only the conservative 'any' motion-gate combination is supported")
 
 
 @dataclass(frozen=True)
@@ -34,6 +59,7 @@ class FailureDefinition:
     event_merge_gap_seconds: float
     recovery_confirmation_seconds: float
     criteria: tuple[CriterionDefinition, ...]
+    imu_motion_gate: ImuMotionGateDefinition | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in {"primary", "sensitivity"}:
@@ -82,6 +108,16 @@ def load_failure_definition(path: str | Path) -> FailureDefinition:
             raise ValueError(f"experiment oracle cannot define failure: {name}")
         comparison = str(settings.get("comparison", "true"))
         threshold = settings.get("threshold", settings.get("threshold_seconds"))
+        applicability = str(settings.get("applicability", "always"))
+        if applicability not in {"always", "backend_declared", "visual_update_stream"}:
+            raise ValueError(f"unsupported criterion applicability: {name}={applicability}")
+        unsupported_policy = str(
+            settings.get("explicitly_unsupported_policy", "not_observable")
+        )
+        if unsupported_policy not in {"not_observable", "not_applicable"}:
+            raise ValueError(
+                f"unsupported explicitly_unsupported_policy: {name}={unsupported_policy}"
+            )
         criteria.append(
             CriterionDefinition(
                 name=name,
@@ -89,8 +125,29 @@ def load_failure_definition(path: str | Path) -> FailureDefinition:
                 requires_ground_truth=bool(settings.get("requires_ground_truth", False)),
                 comparison=comparison,
                 threshold=None if threshold is None else float(threshold),
+                applicability=applicability,
+                explicitly_unsupported_policy=unsupported_policy,
             )
         )
+
+    motion_payload = payload.get("imu_motion_gate")
+    motion_gate = None
+    if motion_payload is not None:
+        if not isinstance(motion_payload, dict):
+            raise ValueError("imu_motion_gate must be a mapping")
+        motion_gate = ImuMotionGateDefinition(
+            schema_version=str(motion_payload["schema_version"]),
+            window_seconds=float(motion_payload["window_seconds"]),
+            gyroscope_rms_threshold_rad_s=float(
+                motion_payload["gyroscope_rms_threshold_rad_s"]
+            ),
+            accelerometer_norm_deviation_rms_threshold_m_s2=float(
+                motion_payload["accelerometer_norm_deviation_rms_threshold_m_s2"]
+            ),
+            gravity_m_s2=float(motion_payload.get("gravity_m_s2", 9.81)),
+            combination=str(motion_payload.get("combination", "any")),
+        )
+
     return FailureDefinition(
         schema_version=str(payload["schema_version"]),
         kind=str(payload["kind"]),
@@ -98,6 +155,7 @@ def load_failure_definition(path: str | Path) -> FailureDefinition:
         event_merge_gap_seconds=float(payload["event_merge_gap_seconds"]),
         recovery_confirmation_seconds=float(payload["recovery_confirmation_seconds"]),
         criteria=tuple(criteria),
+        imu_motion_gate=motion_gate,
     )
 
 

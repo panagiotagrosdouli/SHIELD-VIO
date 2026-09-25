@@ -5,7 +5,7 @@ references:
   experimental_design: docs/publication/EXPERIMENTAL_DESIGN_V1.md
   split_registry: configs/paper/public_dataset_splits.yaml
   public_run_registry: configs/paper/public_benchmark.yaml
-  primary_failure_definition: configs/paper/failure_primary_v1.yaml
+  primary_failure_definition: configs/paper/failure_primary_v2.yaml
 
 experimental_unit:
   fields: [dataset, sequence, estimator, degradation_condition, seed]

@@ -28,6 +28,14 @@ An estimation failure begins when any of the following observable criteria reach
 | Visual-update starvation while motion is observed | No accepted update for `> 0.5 s` | `0.5 s` | Update events and IMU motion gate |
 | Estimator reset or unrecovered relocalization | Declared event | Immediate | Backend event log |
 
+### V2 motion-gate and applicability freeze
+
+The current confirmatory configuration is `configs/paper/failure_primary_v2.yaml` (`SHIELD_VIO_FAILURE_V2`). V2 was frozen before confirmatory test inspection after the V1 real-data availability audit exposed two underspecified cases.
+
+For `visual_update_starvation_while_motion`, motion is detected causally from the trailing 0.25 s IMU window. Motion is present when either gyroscope-norm RMS exceeds 0.05 rad/s or RMS deviation of accelerometer norm from 9.81 m/s² exceeds 0.30 m/s². These are predeclared engineering thresholds, not values selected on EuRoC test performance, and they are included in the sensitivity grid.
+
+Backend-declared criteria distinguish missing instrumentation from non-applicability. A criterion may be `NOT_APPLICABLE` only when the run explicitly declares that the backend does not implement the corresponding semantic state or stream and the frozen configuration permits that policy. Missing fields, ambiguous support, or absent instrumentation remain `NOT_OBSERVABLE` and block primary-label construction. `NOT_APPLICABLE` criteria are omitted from the union rather than silently set healthy.
+
 Ground truth is privileged and is used only by offline label construction and evaluation. It must never enter the health feature table, runtime detector, calibrator, shift detector, or shield policy.
 
 The main paper reports the union of these primary criteria and also reports criterion-specific performance. An onset caused only by ground-truth error remains evaluable even if deployable health diagnostics appear nominal; this is necessary to measure silent failure.
@@ -45,7 +53,7 @@ For sensitivity analysis, not the primary H1/H2 endpoint, a consistency failure 
 | Tracking collapse | Feature count below backend-specific minimum or tracking state lost | 0.5 s |
 | Bias instability | Bias magnitude above a sensor-specific admissible bound | 0.5 s |
 
-When a signal is unavailable from a black-box estimator, the criterion is marked `NOT_OBSERVABLE`; it is not silently treated as healthy.
+When a required signal is unavailable from a backend, the default state is `NOT_OBSERVABLE`; it is not silently treated as healthy. `NOT_APPLICABLE` is reserved for an explicitly declared unsupported backend semantic under the frozen V2 applicability policy.
 
 ## Navigation-critical failure
 
@@ -114,7 +122,9 @@ Every experiment manifest must record:
 
 ## Relationship to current code
 
-`shield_vio/evaluation/failure_labels.py` currently implements instantaneous observable thresholds and correctly excludes degradation metadata. It does not yet implement persistence, event onset/offset, censoring, orientation error, update starvation, horizon targets, or primary-versus-secondary label sets. Until those operations are implemented and tested, its output is a sample-level diagnostic label rather than the paper’s definitive event label.
+`shield_vio/evaluation/failure_definition.py` implements versioned criterion thresholds, timestamp-aware persistence, event merging/recovery timing, oracle-field rejection, and future-horizon targets. `shield_vio/evaluation/primary_observables.py` exports the real-run observable quantities and distinguishes observability from applicability. The older `shield_vio/evaluation/failure_labels.py` remains a sample-level diagnostic helper and is not the paper’s definitive event-label path.
+
+Primary composite labels must use the V2 observable table and must censor samples for which any applicable criterion is unavailable. They must not substitute the older smoke-only position-error label or the sample-level diagnostic helper.
 
 ## Sensitivity definitions
 
