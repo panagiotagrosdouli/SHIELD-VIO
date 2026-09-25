@@ -154,9 +154,53 @@ def _member_relative_to_sequence(member_name: str, sequence: str) -> str | None:
     try:
         index = parts.index(sequence)
     except ValueError:
+        if normalized.startswith("mav0/"):
+            return normalized
         return None
     relative = "/".join(parts[index + 1 :])
     return relative or None
+
+
+def _selected_asl_members(
+    archive: zipfile.ZipFile,
+    sequence: str,
+) -> list[tuple[zipfile.ZipInfo, str]]:
+    selected: list[tuple[zipfile.ZipInfo, str]] = []
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        relative = _member_relative_to_sequence(info.filename, sequence)
+        if relative is None:
+            continue
+        keep = (
+            relative == "mav0/cam0/data.csv"
+            or relative == "mav0/imu0/data.csv"
+            or (
+                relative.startswith("mav0/cam0/data/")
+                and relative.lower().endswith(".png")
+            )
+        )
+        if keep:
+            selected.append((info, relative))
+    return selected
+
+
+def _extract_selected_asl_members(
+    archive: zipfile.ZipFile,
+    selected: list[tuple[zipfile.ZipInfo, str]],
+    output_root: Path,
+) -> tuple[list[Path], int]:
+    extracted: list[Path] = []
+    camera_frames = 0
+    for info, relative in selected:
+        destination = _safe_destination(output_root, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with archive.open(info) as source, destination.open("wb") as target:
+            shutil.copyfileobj(source, target)
+        extracted.append(destination)
+        if relative.startswith("mav0/cam0/data/") and relative.lower().endswith(".png"):
+            camera_frames += 1
+    return extracted, camera_frames
 
 
 def _remote_identity(info: dict[str, Any]) -> dict[str, Any]:
@@ -213,50 +257,68 @@ def _selective_huggingface_asl(
             remote_info = {"etag": None, "archive_bytes": None}
 
         with zipfile.ZipFile(remote) as archive:
-            selected: list[tuple[zipfile.ZipInfo, str]] = []
-            for info in archive.infolist():
-                if info.is_dir():
-                    continue
-                relative = _member_relative_to_sequence(info.filename, sequence)
-                if relative is None:
-                    continue
-                keep = (
-                    relative == "mav0/cam0/data.csv"
-                    or relative == "mav0/imu0/data.csv"
-                    or (
-                        relative.startswith("mav0/cam0/data/")
-                        and relative.lower().endswith(".png")
-                    )
-                )
-                if keep:
-                    selected.append((info, relative))
+            selected = _selected_asl_members(archive, sequence)
+            container_member: str | None = None
+            nested_archive_sha256: str | None = None
+            nested_archive_bytes: int | None = None
 
             required = {"mav0/cam0/data.csv", "mav0/imu0/data.csv"}
             present = {relative for _, relative in selected}
-            missing = sorted(required - present)
-            if missing:
-                raise ValueError(
-                    f"aggregate archive lacks required {sequence} members: {', '.join(missing)}"
+            if not required <= present:
+                nested_candidates = [
+                    info
+                    for info in archive.infolist()
+                    if not info.is_dir()
+                    and info.filename.replace("\\", "/").split("/")[-1].lower()
+                    == f"{sequence}.zip".lower()
+                ]
+                if len(nested_candidates) != 1:
+                    preview = [info.filename for info in archive.infolist()[:30]]
+                    missing = sorted(required - present)
+                    raise ValueError(
+                        f"aggregate archive lacks direct {sequence} members and a unique "
+                        f"{sequence}.zip container; missing={missing}; "
+                        f"member_preview={preview}"
+                    )
+
+                nested_info = nested_candidates[0]
+                container_member = nested_info.filename
+                nested_path = output_root.parent / f".{sequence}.nested.zip"
+                with archive.open(nested_info) as source, nested_path.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+                nested_archive_sha256 = _file_sha256(nested_path)
+                nested_archive_bytes = int(nested_path.stat().st_size)
+                try:
+                    with zipfile.ZipFile(nested_path) as nested:
+                        selected = _selected_asl_members(nested, sequence)
+                        present = {relative for _, relative in selected}
+                        missing = sorted(required - present)
+                        if missing:
+                            preview = [info.filename for info in nested.infolist()[:30]]
+                            raise ValueError(
+                                f"nested {sequence} archive lacks required members: "
+                                f"{missing}; member_preview={preview}"
+                            )
+                        extracted_source_files, camera_frames = _extract_selected_asl_members(
+                            nested,
+                            selected,
+                            output_root,
+                        )
+                finally:
+                    nested_path.unlink(missing_ok=True)
+            else:
+                extracted_source_files, camera_frames = _extract_selected_asl_members(
+                    archive,
+                    selected,
+                    output_root,
                 )
-            camera_frames = sum(
-                1
-                for _, relative in selected
-                if relative.startswith("mav0/cam0/data/")
-                and relative.lower().endswith(".png")
-            )
+
+            member_count = len(extracted_source_files)
             if camera_frames < 100:
                 raise ValueError(
                     f"aggregate archive has unexpectedly few {sequence} cam0 frames: "
                     f"{camera_frames}"
                 )
-
-            for info, relative in selected:
-                destination = _safe_destination(output_root, relative)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(info) as source, destination.open("wb") as target:
-                    shutil.copyfileobj(source, target)
-                extracted_source_files.append(destination)
-                member_count += 1
 
     subset_sha256 = _files_sha256(output_root, extracted_source_files)
     checksum_status = "observed_unfrozen"
@@ -300,6 +362,9 @@ def _selective_huggingface_asl(
         "ground_truth_samples": ground_truth_count,
         "source_member_count": member_count,
         "source_subset_sha256": subset_sha256,
+        "container_member": container_member,
+        "nested_archive_sha256": nested_archive_sha256,
+        "nested_archive_bytes": nested_archive_bytes,
         "source_subset_uncompressed_bytes": int(
             sum(path.stat().st_size for path in extracted_source_files)
         ),
