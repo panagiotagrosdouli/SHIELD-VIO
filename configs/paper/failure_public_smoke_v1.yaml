@@ -17,4 +17,4 @@ post_failure_policy: exclude_active_failure
 incomplete_tail_policy: censor
 current_time_in_future_interval: false
 # Infrastructure/smoke only. The primary confirmatory definition remains
-# configs/paper/failure_primary_v1.yaml and must not be replaced by this file.
+# configs/paper/failure_primary_v2.yaml and must not be replaced by this file.
