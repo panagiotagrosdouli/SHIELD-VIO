@@ -28,7 +28,7 @@ sequences:
     fallback:
       source_kind: huggingface_aggregate_zip_range
       url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room1.zip?download=true
-      expected_subset_sha256: null
+      expected_subset_sha256: 15d23ff61d33993e983286bafb21c2d16b560166cf51b10de24ae0ebc407210d
   MH_03_medium:
     split: calibration
     source_kind: openvins_google_drive_rosbag2
@@ -38,7 +38,7 @@ sequences:
     fallback:
       source_kind: huggingface_aggregate_zip_range
       url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/machine_hall.zip?download=true
-      expected_subset_sha256: null
+      expected_subset_sha256: 31d4e2a1af5c4020c825685ce1bf96b2a8daa9c2dd1e131fa764768c1e2abdc0
   V1_02_medium:
     split: calibration
     source_kind: openvins_google_drive_rosbag2
@@ -48,7 +48,7 @@ sequences:
     fallback:
       source_kind: huggingface_aggregate_zip_range
       url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room1.zip?download=true
-      expected_subset_sha256: null
+      expected_subset_sha256: cbf0235c70d4d81bc145a1bf76db8c70c863f9166d64a484319ab85de9cad346
   V2_01_easy:
     split: validation
     source_kind: openvins_google_drive_rosbag2
@@ -58,7 +58,7 @@ sequences:
     fallback:
       source_kind: huggingface_aggregate_zip_range
       url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room2.zip?download=true
-      expected_subset_sha256: null
+      expected_subset_sha256: d2f159399e0832dbfdf177412775f1c34a220c95817b0a1bbd1183e56f072a70
   V2_02_medium:
     split: validation
     source_kind: openvins_google_drive_rosbag2
@@ -68,7 +68,7 @@ sequences:
     fallback:
       source_kind: huggingface_aggregate_zip_range
       url: https://huggingface.co/datasets/GlowBond/EuRoC_MAV_Dataset/resolve/main/vicon_room2.zip?download=true
-      expected_subset_sha256: null
+      expected_subset_sha256: 44e9c9b389fde8e200054eb8f2d48febccc13ae7c9f8119477305b4e0b0b9d1d
 
 freeze_policy:
   first_success:
