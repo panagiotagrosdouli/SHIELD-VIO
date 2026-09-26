@@ -88,7 +88,11 @@ def _write_manifest(summary: EuRoCRunSummary, destination: Path) -> None:
     )
 
 
-def load_runner_trajectory(path: str | Path) -> TimestampedTrajectory:
+def load_runner_trajectory(
+    path: str | Path,
+    *,
+    relative_time: bool = True,
+) -> TimestampedTrajectory:
     """Load the runner's headered trajectory CSV for position evaluation."""
     trajectory_path = Path(path)
     with trajectory_path.open("r", encoding="utf-8", newline="") as stream:
@@ -102,7 +106,9 @@ def load_runner_trajectory(path: str | Path) -> TimestampedTrajectory:
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"invalid runner trajectory: {trajectory_path}") from exc
-    timestamps = (timestamps_ns - timestamps_ns[0]).astype(float) * 1e-9
+    timestamps = timestamps_ns.astype(float) * 1e-9
+    if relative_time:
+        timestamps = timestamps - timestamps[0]
     return TimestampedTrajectory(timestamps, positions)
 
 
@@ -116,8 +122,15 @@ def evaluate_run_artifacts(
 ) -> dict[str, object]:
     """Evaluate a completed runner trajectory against EuRoC ground truth."""
     destination = Path(output_dir)
-    estimate = load_runner_trajectory(destination / "trajectory.csv")
-    ground_truth = load_euroc_ground_truth(sequence_root)
+    # Use one absolute timestamp axis for artifact evaluation. Independently
+    # zeroing estimate and ground truth would mis-associate estimators that
+    # initialize after the beginning of the public sequence (for example
+    # OpenVINS MH_01 with the upstream-recommended 40 s serial start).
+    estimate = load_runner_trajectory(
+        destination / "trajectory.csv",
+        relative_time=False,
+    )
+    ground_truth = load_euroc_ground_truth(sequence_root, relative_time=False)
     timestamps, estimated_positions, gt_positions = associate_ground_truth(
         estimate, ground_truth, max_gap=max_gap
     )
