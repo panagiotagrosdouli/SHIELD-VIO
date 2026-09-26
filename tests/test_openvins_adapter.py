@@ -6,6 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from shield_vio.evaluation.failure_definition import load_failure_definition
+from shield_vio.evaluation.primary_failure_targets import build_primary_failure_targets
+from shield_vio.evaluation.primary_observables import build_primary_observables
 from shield_vio.experiments.openvins_adapter import import_openvins_total_state
 
 
@@ -164,3 +167,60 @@ def test_openvins_adapter_rejects_mismatched_estimate_deviation_timestamps(
             adapter_config=_config(),
             evaluate=False,
         )
+
+
+def test_openvins_adapter_feeds_primary_v2_observable_pipeline(tmp_path: Path) -> None:
+    sequence = tmp_path / "MH_fixture"
+    _write_camera(sequence)
+    _write_gt(sequence)
+    # Primary V2 motion-gate construction needs real IMU rows even though the
+    # imported OpenVINS total-state export has no visual-update stream.
+    imu_root = sequence / "mav0/imu0"
+    imu_root.mkdir(parents=True)
+    with (imu_root / "data.csv").open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(
+            [
+                "#timestamp [ns]",
+                "w_RS_S_x [rad s^-1]",
+                "w_RS_S_y [rad s^-1]",
+                "w_RS_S_z [rad s^-1]",
+                "a_RS_S_x [m s^-2]",
+                "a_RS_S_y [m s^-2]",
+                "a_RS_S_z [m s^-2]",
+            ]
+        )
+        for timestamp in range(900_000_000, 3_100_000_001, 50_000_000):
+            writer.writerow([timestamp, 0.0, 0.0, 0.0, 0.0, 0.0, 9.81])
+
+    estimate, deviation = _write_openvins(tmp_path)
+    output = tmp_path / "run"
+    import_openvins_total_state(
+        estimate,
+        deviation,
+        sequence,
+        output,
+        adapter_config=_config(),
+        evaluate=False,
+    )
+
+    definition = load_failure_definition(
+        Path(__file__).parents[1] / "configs/paper/failure_primary_v2.yaml"
+    )
+    table = build_primary_observables(
+        output,
+        sequence,
+        max_ground_truth_gap_seconds=0.01,
+        rpe_interval_seconds=1.0,
+        rpe_pair_tolerance_seconds=0.01,
+        failure_definition=definition,
+    )
+
+    assert not table.applicable["terminal_tracking_loss"].any()
+    assert not table.applicable["visual_update_starvation_while_motion"].any()
+    assert table.observable["invalid_pose_or_covariance"].all()
+    assert table.observable["estimator_reset_or_unrecovered_relocalization"].all()
+
+    result = build_primary_failure_targets(table, definition)
+    assert result.definition_version == "SHIELD_VIO_FAILURE_V2"
+    assert result.complete_observability_mask.sum() >= 3
