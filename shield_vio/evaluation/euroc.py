@@ -50,7 +50,11 @@ def _data_rows(path: Path) -> list[list[str]]:
     return rows
 
 
-def load_euroc_ground_truth(sequence_root: str | Path) -> TimestampedTrajectory:
+def load_euroc_ground_truth(
+    sequence_root: str | Path,
+    *,
+    relative_time: bool = True,
+) -> TimestampedTrajectory:
     """Load EuRoC body-frame ground-truth positions.
 
     The expected file is
@@ -69,7 +73,9 @@ def load_euroc_ground_truth(sequence_root: str | Path) -> TimestampedTrajectory:
         positions = np.asarray([[float(row[1]), float(row[2]), float(row[3])] for row in rows])
     except (IndexError, ValueError) as exc:
         raise ValueError(f"invalid EuRoC ground-truth row in {path}") from exc
-    timestamps = (timestamps_ns - timestamps_ns[0]).astype(float) * 1e-9
+    timestamps = timestamps_ns.astype(float) * 1e-9
+    if relative_time:
+        timestamps = timestamps - timestamps[0]
     return TimestampedTrajectory(timestamps, positions)
 
 
