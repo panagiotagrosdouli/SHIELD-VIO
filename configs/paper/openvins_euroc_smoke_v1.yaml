@@ -1,0 +1,31 @@
+schema_version: SHIELD_VIO_OPENVINS_EUROC_SMOKE_V1
+openvins_revision: 69488123ed9362dd44b6f28e7f4680abbff1442b
+container_image: osrf/ros:noetic-desktop-full
+sequence: MH_01_easy
+source:
+  kind: checksum_verified_ros1_bag_mirror
+  url: https://huggingface.co/datasets/kavehsgh/EuRoC_MAV_Dataset_Machine_Hall_Easy_01/resolve/main/MH_01_easy.bag?download=true
+  sha256: 57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9
+execution:
+  executable: ros1_serial_msckf
+  config: euroc_mav
+  bag_start_seconds: 40.0
+  bag_duration_seconds: -1.0
+  use_stereo: true
+  max_cameras: 2
+  save_total_state: true
+  ground_truth_initialization: false
+  verbosity: INFO
+outputs:
+  estimate: state_estimate.txt
+  deviation: state_deviation.txt
+adapter: configs/paper/openvins_adapter_v1.yaml
+failure_definition: configs/paper/failure_primary_v2.yaml
+split: train
+evidence_level: PUBLIC_DATASET_DEVELOPMENT
+claim_boundary: >-
+  First pinned external-estimator development execution. OpenVINS receives only the
+  EuRoC sensor bag and its pinned estimator calibration/configuration; ground truth
+  is not passed to the serial estimator. Ground truth is consumed only after
+  execution by SHIELD-VIO offline failure-label/evaluation code. This run is
+  non-confirmatory and does not open the paper test partition.
