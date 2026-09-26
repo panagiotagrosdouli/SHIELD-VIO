@@ -1,0 +1,39 @@
+schema_version: SHIELD_VIO_OPENVINS_ADAPTER_V1
+openvins_revision: 69488123ed9362dd44b6f28e7f4680abbff1442b
+source_export:
+  estimate_file: state_estimate.txt
+  deviation_file: state_deviation.txt
+  estimate_format: openvins_total_state
+  deviation_format: openvins_state_standard_deviation
+time_semantics:
+  estimate_timestamp_clock: imu
+  camera_time_formula: timestamp_in_imu_clock_minus_estimated_cam_to_imu_offset
+orientation_semantics:
+  source: jpl_G_to_I_xyzw
+  output: hamilton_I_to_G_wxyz
+  note: source JPL G-to-I coefficients are numerically equal to Hamilton I-to-G xyzw
+covariance_semantics:
+  representation: diagonal_approximation_from_published_standard_deviations
+  components:
+    - orientation_error
+    - position
+    - velocity
+    - gyro_bias
+    - accel_bias
+  full_cross_covariance_available: false
+backend_capabilities:
+  terminal_tracking_loss_observable: false
+  reset_event:
+    supported: false
+    exported_value: false
+    rationale: pinned serial MSCKF execution exposes no runtime reset event path
+  relocalization_event:
+    supported: false
+    exported_value: false
+    rationale: pinned serial MSCKF execution exposes no runtime relocalization path
+  visual_update_stream_available_in_total_state_export: false
+claim_boundary: >-
+  Adapter contract for pinned OpenVINS serial total-state exports. Missing NIS and
+  visual-tracking diagnostics remain missing; they are never synthesized. Covariance
+  health is derived only from the published state standard deviations and is labeled
+  as a diagonal approximation.
