@@ -1,13 +1,7 @@
 name: Freeze EuRoC development sources
 
 on:
-  pull_request:
-    paths:
-      - 'configs/paper/euroc_development_sources.yaml'
-      - 'scripts/acquire_euroc_development.py'
-      - 'scripts/convert_euroc_rosbag.py'
-      - 'pyproject.toml'
-      - '.github/workflows/euroc-development-source-freeze.yml'
+  workflow_dispatch:
 
 jobs:
   freeze-source:
