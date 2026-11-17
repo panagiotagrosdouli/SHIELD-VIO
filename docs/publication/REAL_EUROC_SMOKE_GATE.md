@@ -104,3 +104,21 @@ After this gate passes:
 6. execute real train/calibration/validation/test partitions;
 7. generate run-level metric tables compatible with the paired aggregation contract;
 8. only then populate confirmatory manuscript tables.
+
+
+## Real-data trajectory accuracy audit
+
+The real EuRoC workflow writes `accuracy_audit.json` alongside the existing paired
+metrics. The audit reads the *actual EuRoC ground-truth path*, calculates its
+traveled length, and reports each estimator's ATE RMSE divided by that length.
+
+- `catastrophic_drift_warning=true` means the aligned ATE RMSE is at least the
+  complete ground-truth traveled distance. This is a diagnostic red flag, not
+  a research-standard success/failure benchmark threshold.
+- `accuracy_validated=false` is always emitted: the heuristic cannot certify
+  an estimator, even when the catastrophic-drift warning is false.
+- Nonfinite and negative trajectory error values fail the audit outright.
+
+The benchmark CI can succeed as an *execution pipeline* while the estimator has
+unacceptable numerical accuracy. Cite trajectory error magnitudes and
+limitations directly; do not describe pipeline-green runs as validated VIO.
