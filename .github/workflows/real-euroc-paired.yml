@@ -233,6 +233,48 @@ jobs:
             results/real_euroc/MH_01_easy/opencv_rotation \
             --output results/real_euroc/MH_01_easy/comparison.json
 
+      - name: Independently evaluate real trajectories with upstream evo
+        run: |
+          python -m pip install 'evo>=1.28,<2'
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+
+          root = Path("results/real_euroc/MH_01_easy")
+          gt = Path("data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv")
+          output = root / "upstream_evo"
+          output.mkdir(parents=True, exist_ok=True)
+
+          def stamp(raw):
+              return f"{int(raw) * 1e-9:.9f}"
+
+          with gt.open(newline="", encoding="utf-8") as stream, (output / "groundtruth.tum").open("w", encoding="utf-8") as dest:
+              for values in csv.reader(stream):
+                  if not values or values[0].lstrip().startswith("#"):
+                      continue
+                  if len(values) < 8:
+                      raise ValueError("EuRoC ground truth has fewer than eight columns")
+                  ts, px, py, pz, qw, qx, qy, qz = values[:8]
+                  dest.write(f"{stamp(ts)} {px} {py} {pz} {qx} {qy} {qz} {qw}\n")
+
+          for run in ("imu_only", "opencv_rotation"):
+              with (root / run / "trajectory.csv").open(newline="", encoding="utf-8") as stream, (output / f"{run}.tum").open("w", encoding="utf-8") as dest:
+                  for row in csv.DictReader(stream):
+                      dest.write(
+                          f"{stamp(row['frame_timestamp_ns'])} "
+                          f"{row['px']} {row['py']} {row['pz']} "
+                          f"{row['qx']} {row['qy']} {row['qz']} {row['qw']}\n"
+                      )
+          PY
+          for estimator in imu_only opencv_rotation; do
+            evo_ape tum \
+              results/real_euroc/MH_01_easy/upstream_evo/groundtruth.tum \
+              "results/real_euroc/MH_01_easy/upstream_evo/${estimator}.tum" \
+              --align --t_max_diff 0.02 \
+              --save_results "results/real_euroc/MH_01_easy/upstream_evo/${estimator}_ape.zip"
+            unzip -tq "results/real_euroc/MH_01_easy/upstream_evo/${estimator}_ape.zip"
+          done
+
       - name: Run public-data failure-prediction vertical slice
         run: |
           python scripts/run_paper_vertical_slice.py \
