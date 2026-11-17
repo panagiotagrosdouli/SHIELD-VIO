@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
-from shield_vio.core.math import quat_multiply, small_angle_quat, quat_to_rot, nearest_psd, mahalanobis_squared
+from shield_vio.core.math import quat_multiply, small_angle_quat, quat_to_rot, nearest_psd, mahalanobis_squared, skew
 from shield_vio.estimation.state import VIOState, STATE_DIM
 from shield_vio.imu.model import IMUNoiseModel
 
@@ -21,7 +21,7 @@ class ErrorStateEKF:
         s = state.copy(); accel = np.asarray(accel_m, dtype=float).reshape(3) - s.accel_bias; gyro = np.asarray(gyro_m, dtype=float).reshape(3) - s.gyro_bias
         R = quat_to_rot(s.orientation); a_world = R @ accel + self.gravity
         s.position = s.position + s.velocity * dt + 0.5 * a_world * dt * dt; s.velocity = s.velocity + a_world * dt; s.orientation = quat_multiply(s.orientation, small_angle_quat(gyro * dt))
-        F = np.eye(STATE_DIM); F[0:3, 3:6] = np.eye(3) * dt; F[3:6, 6:9] = -R * dt; F[3:6, 9:12] = -R * dt; F[6:9, 12:15] = -np.eye(3) * dt
+        F = np.eye(STATE_DIM); F[0:3, 3:6] = np.eye(3) * dt; F[3:6, 6:9] = -(R @ skew(accel)) * dt; F[3:6, 9:12] = -R * dt; F[6:9, 12:15] = -np.eye(3) * dt
         Qd = np.eye(STATE_DIM) * 1e-12; Qd[3:6,3:6] = np.eye(3) * self.noise.accel_noise_density**2 * dt; Qd[6:9,6:9] = np.eye(3) * self.noise.gyro_noise_density**2 * dt; Qd[9:12,9:12] = np.eye(3) * self.noise.accel_bias_random_walk**2 * dt; Qd[12:15,12:15] = np.eye(3) * self.noise.gyro_bias_random_walk**2 * dt
         s.covariance = nearest_psd(F @ s.covariance @ F.T + Qd); s.normalize(); return s
     def update_linear(self, state: VIOState, residual: np.ndarray, H: np.ndarray, R: np.ndarray) -> VIOState:
