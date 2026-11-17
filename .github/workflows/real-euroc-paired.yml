@@ -255,7 +255,7 @@ jobs:
                   if len(values) < 8:
                       raise ValueError("EuRoC ground truth has fewer than eight columns")
                   ts, px, py, pz, qw, qx, qy, qz = values[:8]
-                  dest.write(f"{stamp(ts)} {px} {py} {pz} {qx} {qy} {qz} {qw}\\n")
+                  dest.write(f"{stamp(ts)} {px} {py} {pz} {qx} {qy} {qz} {qw}\n")
 
           for run in ("imu_only", "opencv_rotation"):
               with (root / run / "trajectory.csv").open(newline="", encoding="utf-8") as stream, (output / f"{run}.tum").open("w", encoding="utf-8") as dest:
@@ -263,7 +263,7 @@ jobs:
                       dest.write(
                           f"{stamp(row['frame_timestamp_ns'])} "
                           f"{row['px']} {row['py']} {row['pz']} "
-                          f"{row['qx']} {row['qy']} {row['qz']} {row['qw']}\\n"
+                          f"{row['qx']} {row['qy']} {row['qz']} {row['qw']}\n"
                       )
           PY
           for estimator in imu_only opencv_rotation; do
