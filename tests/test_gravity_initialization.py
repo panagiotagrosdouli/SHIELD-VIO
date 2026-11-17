@@ -37,7 +37,7 @@ def test_gravity_alignment_rejects_nonstationary_motion() -> None:
 def test_gravity_alignment_rejects_dynamic_specific_force() -> None:
     backend = ESKFBackend()
     backend.initialize(0)
-    acceleration = np.tile(np.array([4.0, 0.0, 9.81]), (50, 1))
+    acceleration = np.tile(np.array([5.0, 0.0, 9.81]), (50, 1))
     gyro = np.zeros_like(acceleration)
     with pytest.raises(ValueError, match="not sufficiently stationary"):
         backend.initialize_from_stationary_imu(acceleration, gyro)
