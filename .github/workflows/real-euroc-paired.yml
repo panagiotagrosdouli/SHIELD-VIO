@@ -194,6 +194,24 @@ jobs:
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
 
+      - name: Test opt-in stationary-IMU initial attitude on real EuRoC
+        run: |
+          python scripts/run_euroc.py data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/gravity_aligned_imu \
+            --gravity-align-window 100
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          aligned = json.loads(Path("results/real_euroc/MH_01_easy/gravity_aligned_imu/metrics.json").read_text())
+          baseline = json.loads(Path("results/real_euroc/MH_01_easy/imu_only/metrics.json").read_text())
+          print(json.dumps({
+              "baseline_ate_rmse_m": baseline["ate_rmse_m"],
+              "gravity_aligned_ate_rmse_m": aligned["ate_rmse_m"],
+              "ate_relative_change": aligned["ate_rmse_m"] / baseline["ate_rmse_m"] - 1.0,
+              "claim_boundary": "Experimental gravity-only initialization (yaw unobservable); no GT used for alignment and no validated VIO claim."
+          }, indent=2))
+          PY
+
       - name: Audit primary failure observables
         run: |
           python scripts/export_primary_observables.py \
