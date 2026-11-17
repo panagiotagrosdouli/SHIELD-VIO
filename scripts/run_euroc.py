@@ -61,6 +61,7 @@ def main() -> None:
         help="Fuse calibrated metric cam0/cam1 stereo-PnP pose updates",
     )
     parser.add_argument("--skip-evaluation", action="store_true", help="Do not compare against EuRoC ground truth")
+    parser.add_argument("--gravity-align-window", type=int, default=0, help="Opt-in: align roll/pitch using a stationary first N IMU samples (>=10); reject dynamic windows")
     parser.add_argument("--max-gap", type=float, default=0.02, help="Maximum timestamp association gap in seconds")
     parser.add_argument("--rpe-delta", type=int, default=1, help="RPE displacement interval in associated samples")
     parser.add_argument("--with-scale", action="store_true", help="Use Sim(3) instead of SE(3) alignment")
@@ -88,6 +89,7 @@ def main() -> None:
         max_gap=args.max_gap,
         rpe_delta=args.rpe_delta,
         with_scale=args.with_scale,
+        gravity_alignment_window=args.gravity_align_window,
     )
     print(json.dumps(summary.__dict__, indent=2, sort_keys=True))
 
