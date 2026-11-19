@@ -90,3 +90,15 @@ def test_runtime_failure_keeps_diagnostics_without_uploading_raw_dataset() -> No
     assert "euroc_input_audit.json" in files
     assert "MH_01_easy.bag" not in files
     assert "mav0/cam0/data" not in files
+
+
+def test_openvins_ubuntu_apt_mirrors_use_https_and_fail_closed() -> None:
+    """Prevent silent package-index failures like EuRoC smoke run 44521357698."""
+    script = _runtime_command()
+    assert "https://archive.ubuntu.com/ubuntu" in script
+    assert "https://security.ubuntu.com/ubuntu" in script
+    assert "/etc/apt/sources.list" in script
+    assert "apt-get update -o APT::Update::Error-Mode=any" in script
+    assert script.index("apt-get update -o APT::Update::Error-Mode=any") < script.index(
+        "apt-get install -y"
+    )
