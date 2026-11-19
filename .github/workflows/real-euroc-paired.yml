@@ -194,6 +194,61 @@ jobs:
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
 
+      - name: Test opt-in stationary-IMU initial attitude on real EuRoC
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          root = Path("results/real_euroc/MH_01_easy")
+          cmd = [
+              sys.executable,
+              "scripts/run_euroc.py",
+              "data/euroc/MH_01_easy",
+              "--output", str(root / "gravity_aligned_imu"),
+              "--gravity-align-window", "100",
+          ]
+          completed = subprocess.run(cmd, capture_output=True, text=True)
+          baseline = json.loads((root / "imu_only" / "metrics.json").read_text())
+          report = {
+              "dataset": "EuRoC MH_01_easy",
+              "initialization": "stationary IMU roll/pitch only",
+              "window_samples": 100,
+              "baseline_ate_rmse_m": baseline["ate_rmse_m"],
+              "confirmatory": False,
+              "ground_truth_used_for_initialization": False,
+              "yaw_observable": False,
+          }
+          if completed.returncode == 0:
+              aligned = json.loads(
+                  (root / "gravity_aligned_imu" / "metrics.json").read_text()
+              )
+              report.update({
+                  "status": "measured",
+                  "gravity_aligned_ate_rmse_m": aligned["ate_rmse_m"],
+                  "ate_relative_change": (
+                      aligned["ate_rmse_m"] / baseline["ate_rmse_m"] - 1.0
+                  ),
+              })
+          elif "IMU initialization window is not sufficiently stationary" in completed.stderr:
+              report.update({
+                  "status": "rejected_nonstationary",
+                  "gravity_aligned_ate_rmse_m": None,
+                  "reason": "The observed IMU window violates stationary alignment prerequisites; no result was fabricated.",
+              })
+          else:
+              raise SystemExit(
+                  "Unexpected gravity-alignment failure (not a scientific rejection):\n"
+                  + completed.stderr
+              )
+          (root / "gravity_alignment_experiment.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
       - name: Audit primary failure observables
         run: |
           python scripts/export_primary_observables.py \

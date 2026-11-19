@@ -151,6 +151,7 @@ def run_synchronized_frames(
     *,
     backend: EstimatorBackend | None = None,
     visual_provider: VisualMeasurementProvider | None = None,
+    gravity_alignment_window: int = 0,
 ) -> EuRoCRunSummary:
     packets = list(packets)
     if not packets:
@@ -161,6 +162,18 @@ def run_synchronized_frames(
 
     estimator = backend or ESKFBackend()
     estimator.initialize(samples[0].timestamp_ns)
+    if gravity_alignment_window:
+        if gravity_alignment_window < 10:
+            raise ValueError("gravity_alignment_window must be >=10 or disabled")
+        if not isinstance(estimator, ESKFBackend):
+            raise ValueError("Gravity alignment is supported only for the built-in ESKF")
+        if len(samples) < gravity_alignment_window:
+            raise ValueError("Not enough IMU samples for gravity alignment")
+        initial = samples[:gravity_alignment_window]
+        estimator.initialize_from_stationary_imu(
+            np.asarray([sample.linear_acceleration_m_s2 for sample in initial]),
+            np.asarray([sample.angular_velocity_rad_s for sample in initial]),
+        )
     propagated = 0
     visual_count = 0
     trajectory_rows: list[list[object]] = []
@@ -301,12 +314,14 @@ def run_euroc_sequence(
     max_gap: float = 0.02,
     rpe_delta: int = 1,
     with_scale: bool = False,
+    gravity_alignment_window: int = 0,
 ) -> EuRoCRunSummary:
     frames = read_camera_frames(sequence_root, camera=camera)
     imu_samples = read_imu_samples(sequence_root)
     packets = synchronize_camera_and_imu(frames, imu_samples, include_pre_first_frame=True)
     summary = run_synchronized_frames(
-        packets, output_dir, backend=backend, visual_provider=visual_provider
+        packets, output_dir, backend=backend, visual_provider=visual_provider,
+        gravity_alignment_window=gravity_alignment_window,
     )
     if not evaluate:
         return summary

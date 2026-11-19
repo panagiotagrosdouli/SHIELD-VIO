@@ -7,6 +7,7 @@ from shield_vio.backends.base import EstimatorHealth, EstimatorState
 from shield_vio.estimation.eskf import ErrorStateEKF
 from shield_vio.estimation.state import VIOState
 from shield_vio.imu.model import IMUNoiseModel
+from shield_vio.core.math import normalize_quaternion
 
 
 class ESKFBackend:
@@ -33,6 +34,58 @@ class ESKFBackend:
         self._timestamp_ns = int(timestamp_ns)
         self._propagated_imu_samples = 0
         self._filter.last_innovation = None
+        return self.snapshot()
+
+    def initialize_from_stationary_imu(
+        self,
+        accelerations: np.ndarray,
+        angular_velocities: np.ndarray,
+        *,
+        accel_tolerance_mps2: float = 1.0,
+        accel_std_max_mps2: float = 0.75,
+        gyro_threshold_rps: float = 0.25,
+    ) -> EstimatorState:
+        """Infer initial roll/pitch from stationary IMU measurements only.
+
+        World yaw is unobservable from gravity and remains arbitrary. No ground
+        truth is used. Reject moving or implausible windows instead of silently
+        treating arbitrary motion acceleration as gravity.
+        """
+        self._require_initialized()
+        accel = np.asarray(accelerations, dtype=float)
+        gyro = np.asarray(angular_velocities, dtype=float)
+        if (
+            accel.ndim != 2 or accel.shape[1] != 3
+            or gyro.shape != accel.shape or len(accel) < 10
+            or not np.all(np.isfinite(accel)) or not np.all(np.isfinite(gyro))
+        ):
+            raise ValueError("Gravity alignment requires >=10 finite paired IMU measurements")
+        mean_accel = np.mean(accel, axis=0)
+        norm = float(np.linalg.norm(mean_accel))
+        gravity_norm = float(np.linalg.norm(self._filter.gravity))
+        norm_std = float(np.std(np.linalg.norm(accel, axis=1)))
+        gyro_median = float(np.median(np.linalg.norm(gyro, axis=1)))
+        if (
+            gravity_norm <= 0
+            or abs(norm - gravity_norm) > accel_tolerance_mps2
+            or norm_std > accel_std_max_mps2
+            or gyro_median > gyro_threshold_rps
+        ):
+            raise ValueError(
+                "IMU initialization window is not sufficiently stationary; "
+                "gravity-based attitude is not identifiable from dynamic acceleration"
+            )
+        source = mean_accel / norm
+        target = -self._filter.gravity / gravity_norm
+        dot = float(np.clip(np.dot(source, target), -1.0, 1.0))
+        if dot < -1.0 + 1e-8:
+            basis = np.eye(3)[int(np.argmin(np.abs(source)))]
+            axis = np.cross(source, basis)
+            axis /= np.linalg.norm(axis)
+            quat = np.r_[0.0, axis]
+        else:
+            quat = np.r_[1.0 + dot, np.cross(source, target)]
+        self._state.orientation = normalize_quaternion(quat)
         return self.snapshot()
 
     def process_imu(
