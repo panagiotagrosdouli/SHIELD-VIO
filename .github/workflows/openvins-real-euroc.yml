@@ -167,10 +167,10 @@ jobs:
               apt-get update
               apt-get install -y --no-install-recommends git python3-rosdep
               rosdep update
-              rosdep install \\
-                --from-paths /workspace/.cache/openvins_noetic_ws/src \\
-                --ignore-src \\
-                --rosdistro noetic \\
+              rosdep install \
+                --from-paths /workspace/.cache/openvins_noetic_ws/src \
+                --ignore-src \
+                --rosdistro noetic \
                 -r -y
               source /workspace/.cache/openvins_noetic_ws/devel/setup.bash
               executable=/workspace/.cache/openvins_noetic_ws/devel/lib/ov_msckf/ros1_serial_msckf
