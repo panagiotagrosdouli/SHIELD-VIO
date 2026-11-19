@@ -107,7 +107,26 @@ jobs:
             bash -lc '
               set -euo pipefail
               source /opt/ros/noetic/setup.bash
+              # The build and execution docker runs use separate ephemeral containers.
+              # Catkin's cached workspace does not cache apt-installed shared libraries.
+              # Reinstall the pinned estimator's ROS/system dependencies in this
+              # runtime container before loading the executable (libceres.so.1).
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends git python3-rosdep
+              rosdep update
+              rosdep install \\
+                --from-paths /workspace/.cache/openvins_noetic_ws/src \\
+                --ignore-src \\
+                --rosdistro noetic \\
+                -r -y
               source /workspace/.cache/openvins_noetic_ws/devel/setup.bash
+              executable=/workspace/.cache/openvins_noetic_ws/devel/lib/ov_msckf/ros1_serial_msckf
+              ldd "$executable" | tee /tmp/openvins-runtime-ldd.txt
+              if grep -q "not found" /tmp/openvins-runtime-ldd.txt; then
+                echo "OpenVINS runtime dependencies unresolved" >&2
+                exit 1
+              fi
               roscore >/tmp/openvins-roscore.log 2>&1 &
               roscore_pid=$!
               trap "kill $roscore_pid >/dev/null 2>&1 || true" EXIT
