@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -38,3 +39,14 @@ def test_build_report_emits_batch_schema(tmp_path: Path) -> None:
     assert result["sample_count"] == 3
     assert result["ate_rmse_m"] == pytest.approx(0.0, abs=1e-12)
     assert result["rpe_rmse_m"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_build_report_preserves_actual_seed(tmp_path: Path) -> None:
+    reference = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)]
+    _write_trajectory(tmp_path / "ground_truth.csv", reference)
+    _write_trajectory(tmp_path / "estimated_trajectory.csv", reference)
+    (tmp_path / "summary.json").write_text(json.dumps({"seed": 42}), encoding="utf-8")
+
+    report = MODULE.build_report(tmp_path)
+
+    assert report["results"][0]["sequence"] == "synthetic_seed_42"
