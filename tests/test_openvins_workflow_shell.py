@@ -59,3 +59,22 @@ def test_ros_setup_scripts_are_sourced_before_bash_nounset() -> None:
     launch = script.index("rosrun ov_msckf ros1_serial_msckf", enable_nounset)
     assert entry < ros_setup < workspace_setup < enable_nounset < launch
     assert "set -euo pipefail" not in script[entry:ros_setup]
+
+
+def test_runtime_failure_keeps_diagnostics_without_uploading_raw_dataset() -> None:
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["mh01-openvins"]["steps"]
+    runtime = _runtime_command()
+    assert "2>&1 | tee results/openvins/MH_01_easy/raw/runtime.log" in runtime
+    assert "set -euo pipefail" in runtime, "pipe failures must propagate to CI"
+    failures = [
+        step for step in steps if step.get("name") == "Upload OpenVINS failure diagnostics"
+    ]
+    assert len(failures) == 1
+    upload = failures[0]
+    assert upload["if"] == "failure()"
+    files = upload["with"]["path"]
+    assert "raw/runtime.log" in files
+    assert "euroc_input_audit.json" in files
+    assert "MH_01_easy.bag" not in files
+    assert "mav0/cam0/data" not in files
