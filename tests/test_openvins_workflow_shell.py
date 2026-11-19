@@ -45,3 +45,17 @@ def test_runtime_does_not_supply_ground_truth_to_estimator() -> None:
     assert "_path_bag:" in script
     assert "_filepath_est:" in script
     assert "ground_truth" not in script
+
+
+def test_ros_setup_scripts_are_sourced_before_bash_nounset() -> None:
+    """ROS Noetic may reference ROS_MASTER_URI before assigning a default."""
+    script = _runtime_command()
+    entry = script.index("test \"$(id -u)\" -eq 0")
+    ros_setup = script.index("source /opt/ros/noetic/setup.bash", entry)
+    workspace_setup = script.index(
+        "source /workspace/.cache/openvins_noetic_ws/devel/setup.bash", ros_setup
+    )
+    enable_nounset = script.index("set -u", workspace_setup)
+    launch = script.index("rosrun ov_msckf ros1_serial_msckf", enable_nounset)
+    assert entry < ros_setup < workspace_setup < enable_nounset < launch
+    assert "set -euo pipefail" not in script[entry:ros_setup]
