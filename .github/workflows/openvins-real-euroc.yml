@@ -150,12 +150,14 @@ jobs:
           # Runtime dependency installation requires root inside the fresh container.
           docker run --rm \
             --user 0:0 \
+            --entrypoint /bin/bash \
             -e OPENVINS_REVISION="$OPENVINS_REVISION" \
             -v "$PWD:/workspace" \
             -w /workspace \
             "$OPENVINS_IMAGE" \
-            bash -lc '
+            -c '
               set -euo pipefail
+              test "$(id -u)" -eq 0 || { echo "Runtime container must execute as root" >&2; exit 1; }
               source /opt/ros/noetic/setup.bash
               # The build and execution docker runs use separate ephemeral containers.
               # Catkin's cached workspace does not cache apt-installed shared libraries.
