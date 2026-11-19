@@ -207,7 +207,7 @@ jobs:
               test -s "$out/state_deviation.txt"
               test "$(grep -vc "^#" "$out/state_estimate.txt")" -gt 10
               test "$(grep -vc "^#" "$out/state_deviation.txt")" -gt 10
-            '
+            ' 2>&1 | tee results/openvins/MH_01_easy/raw/runtime.log
 
       - name: Create OpenVINS execution receipt
         run: |
@@ -320,6 +320,20 @@ jobs:
           )
           print(json.dumps(report, indent=2, sort_keys=True))
           PY
+
+      - name: Upload OpenVINS failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-vio-openvins-euroc-mh01-diagnostics
+          path: |
+            data/openvins/euroc_input_audit.json
+            data/euroc/MH_01_easy/portable_acquisition_manifest.json
+            results/openvins/MH_01_easy/raw/runtime.log
+            results/openvins/MH_01_easy/raw/state_estimate.txt
+            results/openvins/MH_01_easy/raw/state_deviation.txt
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload OpenVINS development smoke artifacts
         uses: actions/upload-artifact@v4
