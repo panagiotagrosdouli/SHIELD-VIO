@@ -81,6 +81,28 @@ jobs:
           test -s data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv
           test -s data/euroc/MH_01_easy/portable_acquisition_manifest.json
 
+      - name: Validate converted EuRoC stream timing and calibration
+        run: |
+          set -euo pipefail
+          python scripts/inspect_euroc.py data/euroc/MH_01_easy \
+            --output data/openvins/euroc_input_audit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("data/openvins/euroc_input_audit.json").read_text())
+          camera = report["camera"]
+          imu = report["imu"]
+          sync = report["synchronization"]
+          assert camera["frame_count"] >= 100, "insufficient camera frames"
+          assert imu["sample_count"] >= 1000, "insufficient IMU measurements"
+          assert camera["observed_rate_hz"] > 0, "invalid camera timestamp rate"
+          assert imu["observed_rate_hz"] > 0, "invalid IMU timestamp rate"
+          assert sync["camera_intervals"] > 0, "empty synchronization intervals"
+          assert sync["empty_imu_intervals"] == 0, "camera intervals missing IMU data"
+          print("EuRoC input preflight passed")
+          PY
+
       - name: Restore pinned OpenVINS catkin workspace
         uses: actions/cache@v4
         with:
@@ -125,13 +147,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p results/openvins/MH_01_easy/raw
+          # Runtime dependency installation requires root inside the fresh container.
           docker run --rm \
+            --user 0:0 \
+            --entrypoint /bin/bash \
             -e OPENVINS_REVISION="$OPENVINS_REVISION" \
             -v "$PWD:/workspace" \
             -w /workspace \
             "$OPENVINS_IMAGE" \
-            bash -lc '
+            -c '
               set -euo pipefail
+              test "$(id -u)" -eq 0 || { echo "Runtime container must execute as root" >&2; exit 1; }
               source /opt/ros/noetic/setup.bash
               # The build and execution docker runs use separate ephemeral containers.
               # Catkin's cached workspace does not cache apt-installed shared libraries.
