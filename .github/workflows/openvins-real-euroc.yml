@@ -1,0 +1,327 @@
+name: OpenVINS real EuRoC development smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'shield_vio/experiments/openvins_adapter.py'
+      - 'scripts/import_openvins_run.py'
+      - 'configs/paper/openvins_adapter_v1.yaml'
+      - 'configs/paper/openvins_euroc_smoke_v1.yaml'
+      - 'configs/paper/failure_primary_v2.yaml'
+      - 'scripts/export_primary_observables.py'
+      - 'scripts/export_primary_failure_targets.py'
+      - 'scripts/build_public_v2_canonical.py'
+      - 'tests/test_openvins_adapter.py'
+      - '.github/workflows/openvins-real-euroc.yml'
+
+jobs:
+  mh01-openvins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      OPENVINS_REVISION: 69488123ed9362dd44b6f28e7f4680abbff1442b
+      OPENVINS_IMAGE: osrf/ros:noetic-desktop-full
+      EUROC_BAG_URL: https://huggingface.co/datasets/kavehsgh/EuRoC_MAV_Dataset_Machine_Hall_Easy_01/resolve/main/MH_01_easy.bag?download=true
+      EUROC_BAG_SHA256: 57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install SHIELD-VIO development dependencies
+        run: python -m pip install -e '.[dev,dataset]'
+
+      - name: Restore EuRoC ROS1 bag cache
+        uses: actions/cache@v4
+        with:
+          path: data/openvins/MH_01_easy.bag
+          key: openvins-euroc-mh01-57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9
+
+      - name: Acquire checksum-verified EuRoC ROS1 bag
+        run: |
+          set -euo pipefail
+          mkdir -p data/openvins
+          bag=data/openvins/MH_01_easy.bag
+          if [[ ! -f "$bag" ]]; then
+            curl \
+              --fail --location \
+              --retry 5 --retry-all-errors --retry-delay 5 \
+              --connect-timeout 30 --max-time 2400 \
+              --output "$bag" "$EUROC_BAG_URL"
+          fi
+          echo "$EUROC_BAG_SHA256  $bag" | sha256sum --check --strict
+
+      - name: Convert verified EuRoC bag to SHIELD-VIO ASL inputs
+        run: |
+          set -euo pipefail
+          mkdir -p data/openvins/pinned
+          base="https://raw.githubusercontent.com/rpng/open_vins/$OPENVINS_REVISION"
+          curl --fail --location --retry 4 --output data/openvins/pinned/MH_01_easy.txt \
+            "$base/ov_data/euroc_mav/MH_01_easy.txt"
+          curl --fail --location --retry 4 --output data/openvins/pinned/kalibr_imucam_chain.yaml \
+            "$base/config/euroc_mav/kalibr_imucam_chain.yaml"
+          curl --fail --location --retry 4 --output data/openvins/pinned/kalibr_imu_chain.yaml \
+            "$base/config/euroc_mav/kalibr_imu_chain.yaml"
+          python scripts/convert_euroc_rosbag.py data/openvins/MH_01_easy.bag \
+            --output data/euroc/MH_01_easy \
+            --sequence MH_01_easy \
+            --expected-bag-sha256 "$EUROC_BAG_SHA256" \
+            --source-url "$EUROC_BAG_URL" \
+            --openvins-ground-truth data/openvins/pinned/MH_01_easy.txt \
+            --openvins-imucam-calibration data/openvins/pinned/kalibr_imucam_chain.yaml \
+            --openvins-imu-calibration data/openvins/pinned/kalibr_imu_chain.yaml \
+            --openvins-revision "$OPENVINS_REVISION" \
+            --evidence-scope PUBLIC_DATASET_DEVELOPMENT
+          test -s data/euroc/MH_01_easy/mav0/cam0/data.csv
+          test -s data/euroc/MH_01_easy/mav0/imu0/data.csv
+          test -s data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv
+          test -s data/euroc/MH_01_easy/portable_acquisition_manifest.json
+
+      - name: Validate converted EuRoC stream timing and calibration
+        run: |
+          set -euo pipefail
+          python scripts/inspect_euroc.py data/euroc/MH_01_easy \
+            --output data/openvins/euroc_input_audit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("data/openvins/euroc_input_audit.json").read_text())
+          camera = report["camera"]
+          imu = report["imu"]
+          sync = report["synchronization"]
+          assert camera["frame_count"] >= 100, "insufficient camera frames"
+          assert imu["sample_count"] >= 1000, "insufficient IMU measurements"
+          assert camera["observed_rate_hz"] > 0, "invalid camera timestamp rate"
+          assert imu["observed_rate_hz"] > 0, "invalid IMU timestamp rate"
+          assert sync["camera_intervals"] > 0, "empty synchronization intervals"
+          assert sync["empty_imu_intervals"] == 0, "camera intervals missing IMU data"
+          print("EuRoC input preflight passed")
+          PY
+
+      - name: Restore pinned OpenVINS catkin workspace
+        uses: actions/cache@v4
+        with:
+          path: .cache/openvins_noetic_ws
+          key: openvins-noetic-69488123ed9362dd44b6f28e7f4680abbff1442b-v1
+
+      - name: Build pinned OpenVINS serial estimator
+        run: |
+          set -euo pipefail
+          docker pull "$OPENVINS_IMAGE"
+          docker run --rm \
+            -e OPENVINS_REVISION="$OPENVINS_REVISION" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "$OPENVINS_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              source /opt/ros/noetic/setup.bash
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends git python3-rosdep
+              ws=/workspace/.cache/openvins_noetic_ws
+              mkdir -p "$ws/src"
+              if [[ ! -d "$ws/src/open_vins/.git" ]]; then
+                rm -rf "$ws/src/open_vins"
+                git clone https://github.com/rpng/open_vins.git "$ws/src/open_vins"
+              fi
+              git -C "$ws/src/open_vins" fetch origin "$OPENVINS_REVISION" --depth 1
+              git -C "$ws/src/open_vins" checkout --detach "$OPENVINS_REVISION"
+              test "$(git -C "$ws/src/open_vins" rev-parse HEAD)" = "$OPENVINS_REVISION"
+              rosdep update
+              rosdep install \
+                --from-paths "$ws/src" \
+                --ignore-src \
+                --rosdistro noetic \
+                -r -y
+              cd "$ws"
+              catkin_make -DCMAKE_BUILD_TYPE=Release -j2
+            '
+
+      - name: Run pinned OpenVINS serial estimator without ground truth
+        run: |
+          set -euo pipefail
+          mkdir -p results/openvins/MH_01_easy/raw
+          # Runtime dependency installation requires root inside the fresh container.
+          docker run --rm \
+            --user 0:0 \
+            --entrypoint /bin/bash \
+            -e OPENVINS_REVISION="$OPENVINS_REVISION" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "$OPENVINS_IMAGE" \
+            -c '
+              set -euo pipefail
+              test "$(id -u)" -eq 0 || { echo "Runtime container must execute as root" >&2; exit 1; }
+              source /opt/ros/noetic/setup.bash
+              # The build and execution docker runs use separate ephemeral containers.
+              # Catkin's cached workspace does not cache apt-installed shared libraries.
+              # Reinstall the pinned estimator's ROS/system dependencies in this
+              # runtime container before loading the executable (libceres.so.1).
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends git python3-rosdep
+              rosdep update
+              rosdep install \
+                --from-paths /workspace/.cache/openvins_noetic_ws/src \
+                --ignore-src \
+                --rosdistro noetic \
+                -r -y
+              source /workspace/.cache/openvins_noetic_ws/devel/setup.bash
+              executable=/workspace/.cache/openvins_noetic_ws/devel/lib/ov_msckf/ros1_serial_msckf
+              ldd "$executable" | tee /tmp/openvins-runtime-ldd.txt
+              if grep -q "not found" /tmp/openvins-runtime-ldd.txt; then
+                echo "OpenVINS runtime dependencies unresolved" >&2
+                exit 1
+              fi
+              roscore >/tmp/openvins-roscore.log 2>&1 &
+              roscore_pid=$!
+              trap "kill $roscore_pid >/dev/null 2>&1 || true" EXIT
+              for _ in $(seq 1 30); do
+                if rosparam list >/dev/null 2>&1; then break; fi
+                sleep 1
+              done
+              rosparam list >/dev/null
+              cfg=/workspace/.cache/openvins_noetic_ws/src/open_vins/config/euroc_mav/estimator_config.yaml
+              bag=/workspace/data/openvins/MH_01_easy.bag
+              out=/workspace/results/openvins/MH_01_easy/raw
+              rosrun ov_msckf ros1_serial_msckf "$cfg" \
+                _path_bag:="$bag" \
+                _bag_start:=40.0 \
+                _bag_durr:=-1.0 \
+                _use_stereo:=true \
+                _max_cameras:=2 \
+                _save_total_state:=true \
+                _filepath_est:="$out/state_estimate.txt" \
+                _filepath_std:="$out/state_deviation.txt" \
+                _verbosity:=INFO
+              test -s "$out/state_estimate.txt"
+              test -s "$out/state_deviation.txt"
+              test "$(grep -vc "^#" "$out/state_estimate.txt")" -gt 10
+              test "$(grep -vc "^#" "$out/state_deviation.txt")" -gt 10
+            '
+
+      - name: Create OpenVINS execution receipt
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          def sha(path):
+              return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+          payload = {
+              "schema_version": "SHIELD_VIO_OPENVINS_EXECUTION_RECEIPT_V1",
+              "evidence_level": "PUBLIC_DATASET_DEVELOPMENT",
+              "confirmatory": False,
+              "dataset": "euroc",
+              "sequence": "MH_01_easy",
+              "estimator": "openvins",
+              "openvins_revision": "69488123ed9362dd44b6f28e7f4680abbff1442b",
+              "container_image": "osrf/ros:noetic-desktop-full",
+              "bag_sha256": "57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9",
+              "bag_start_seconds": 40.0,
+              "use_stereo": True,
+              "ground_truth_passed_to_estimator": False,
+              "source_export_sha256": {
+                  "state_estimate.txt": sha("results/openvins/MH_01_easy/raw/state_estimate.txt"),
+                  "state_deviation.txt": sha("results/openvins/MH_01_easy/raw/state_deviation.txt"),
+              },
+              "claim_boundary": (
+                  "Pinned external-estimator development execution. Ground truth is not "
+                  "provided to OpenVINS and is used only by downstream offline evaluation."
+              ),
+          }
+          path = Path("results/openvins/MH_01_easy/raw/execution_receipt.json")
+          path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(json.dumps(payload, indent=2, sort_keys=True))
+          PY
+
+      - name: Import OpenVINS artifacts into SHIELD-VIO contract
+        run: |
+          python scripts/import_openvins_run.py \
+            --estimate results/openvins/MH_01_easy/raw/state_estimate.txt \
+            --deviation results/openvins/MH_01_easy/raw/state_deviation.txt \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/openvins/MH_01_easy/imported \
+            --adapter-config configs/paper/openvins_adapter_v1.yaml
+          cat results/openvins/MH_01_easy/imported/experiment_manifest.json
+
+      - name: Audit OpenVINS primary V2 observables
+        run: |
+          python scripts/export_primary_observables.py \
+            --run-dir results/openvins/MH_01_easy/imported \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/openvins/MH_01_easy/primary_observables \
+            --failure-config configs/paper/failure_primary_v2.yaml
+          cat results/openvins/MH_01_easy/primary_observables/primary_observable_audit.json
+
+      - name: Export OpenVINS primary V2 events and targets
+        run: |
+          python scripts/export_primary_failure_targets.py \
+            --run-dir results/openvins/MH_01_easy/imported \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/openvins/MH_01_easy/primary_failure_targets \
+            --failure-config configs/paper/failure_primary_v2.yaml \
+            --evidence-level PUBLIC_DATASET_DEVELOPMENT
+          cat results/openvins/MH_01_easy/primary_failure_targets/primary_failure_manifest.json
+
+      - name: Build canonical OpenVINS V2 development artifact
+        run: |
+          python scripts/build_public_v2_canonical.py \
+            --run-dir results/openvins/MH_01_easy/imported \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/openvins/MH_01_easy/canonical_v2 \
+            --dataset euroc \
+            --sequence MH_01_easy \
+            --estimator openvins \
+            --split train \
+            --split-config configs/paper/public_dataset_splits.yaml \
+            --failure-config configs/paper/failure_primary_v2.yaml
+          cat results/openvins/MH_01_easy/canonical_v2/canonical_manifest.json
+
+      - name: Report OpenVINS 2 s target balance
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          from pathlib import Path
+
+          root = Path("results/openvins/MH_01_easy/canonical_v2")
+          with (root / "prediction_targets.csv").open(newline="", encoding="utf-8") as stream:
+              rows = list(csv.DictReader(stream))
+          eligible = [row for row in rows if int(row["eligible_2.0s"])]
+          positive = sum(int(row["failure_within_2.0s"]) for row in eligible)
+          report = {
+              "schema_version": "SHIELD_VIO_OPENVINS_TARGET_BALANCE_V1",
+              "sequence": "MH_01_easy",
+              "estimator": "openvins",
+              "horizon_seconds": 2.0,
+              "eligible_samples": len(eligible),
+              "positive_windows": positive,
+              "negative_windows": len(eligible) - positive,
+              "discrimination_defined": positive > 0 and positive < len(eligible),
+              "claim_boundary": (
+                  "Development target-balance diagnostic only; not a detector result."
+              ),
+          }
+          (root / "target_balance_h2.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload OpenVINS development smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shield-vio-openvins-euroc-mh01
+          path: results/openvins/MH_01_easy
+          if-no-files-found: error
+          retention-days: 30

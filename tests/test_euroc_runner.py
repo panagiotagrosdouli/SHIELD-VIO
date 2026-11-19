@@ -161,3 +161,34 @@ def test_evaluate_run_artifacts_writes_ate_and_rpe(tmp_path: Path) -> None:
     assert metrics["rpe_translation_rmse_m"] < 1e-12
     written = json.loads((output / "metrics.json").read_text(encoding="utf-8"))
     assert written == metrics
+
+
+def test_evaluate_run_artifacts_preserves_late_start_timestamp_alignment(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "late-results"
+    output.mkdir()
+    trajectory_path = output / "trajectory.csv"
+    with trajectory_path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["frame_timestamp_ns", "state_timestamp_ns", "px", "py", "pz"])
+        # Estimator starts two seconds after the public GT timeline begins.
+        for index in range(3):
+            timestamp_ns = 3_000_000_000 + index * 1_000_000_000
+            writer.writerow([timestamp_ns, timestamp_ns, index + 2, 0.0, 0.0])
+
+    sequence = tmp_path / "MH_late"
+    ground_truth = sequence / "mav0" / "state_groundtruth_estimate0"
+    ground_truth.mkdir(parents=True)
+    with (ground_truth / "data.csv").open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["#timestamp", "p_RS_R_x", "p_RS_R_y", "p_RS_R_z"])
+        for index in range(5):
+            timestamp_ns = 1_000_000_000 + index * 1_000_000_000
+            writer.writerow([timestamp_ns, index, 0.0, 0.0])
+
+    metrics = evaluate_run_artifacts(sequence, output, max_gap=0.1)
+
+    assert metrics["associated_samples"] == 3
+    assert metrics["ate_rmse_m"] < 1e-12
+    assert metrics["rpe_translation_rmse_m"] < 1e-12
