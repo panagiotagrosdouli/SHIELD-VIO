@@ -147,7 +147,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p results/openvins/MH_01_easy/raw
+          # Runtime dependency installation requires root inside the fresh container.
           docker run --rm \
+            --user 0:0 \
             -e OPENVINS_REVISION="$OPENVINS_REVISION" \
             -v "$PWD:/workspace" \
             -w /workspace \
