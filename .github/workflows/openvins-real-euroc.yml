@@ -55,6 +55,32 @@ jobs:
           fi
           echo "$EUROC_BAG_SHA256  $bag" | sha256sum --check --strict
 
+      - name: Convert verified EuRoC bag to SHIELD-VIO ASL inputs
+        run: |
+          set -euo pipefail
+          mkdir -p data/openvins/pinned
+          base="https://raw.githubusercontent.com/rpng/open_vins/$OPENVINS_REVISION"
+          curl --fail --location --retry 4 --output data/openvins/pinned/MH_01_easy.txt \
+            "$base/ov_data/euroc_mav/MH_01_easy.txt"
+          curl --fail --location --retry 4 --output data/openvins/pinned/kalibr_imucam_chain.yaml \
+            "$base/config/euroc_mav/kalibr_imucam_chain.yaml"
+          curl --fail --location --retry 4 --output data/openvins/pinned/kalibr_imu_chain.yaml \
+            "$base/config/euroc_mav/kalibr_imu_chain.yaml"
+          python scripts/convert_euroc_rosbag.py data/openvins/MH_01_easy.bag \
+            --output data/euroc/MH_01_easy \
+            --sequence MH_01_easy \
+            --expected-bag-sha256 "$EUROC_BAG_SHA256" \
+            --source-url "$EUROC_BAG_URL" \
+            --openvins-ground-truth data/openvins/pinned/MH_01_easy.txt \
+            --openvins-imucam-calibration data/openvins/pinned/kalibr_imucam_chain.yaml \
+            --openvins-imu-calibration data/openvins/pinned/kalibr_imu_chain.yaml \
+            --openvins-revision "$OPENVINS_REVISION" \
+            --evidence-scope PUBLIC_DATASET_DEVELOPMENT
+          test -s data/euroc/MH_01_easy/mav0/cam0/data.csv
+          test -s data/euroc/MH_01_easy/mav0/imu0/data.csv
+          test -s data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv
+          test -s data/euroc/MH_01_easy/portable_acquisition_manifest.json
+
       - name: Restore pinned OpenVINS catkin workspace
         uses: actions/cache@v4
         with:
