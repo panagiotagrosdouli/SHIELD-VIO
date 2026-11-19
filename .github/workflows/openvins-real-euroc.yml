@@ -109,9 +109,10 @@ jobs:
           path: .cache/openvins_noetic_ws
           key: openvins-noetic-69488123ed9362dd44b6f28e7f4680abbff1442b-v1
 
-      - name: Build pinned OpenVINS serial estimator
+      - name: Build and run pinned OpenVINS serial estimator without ground truth
         run: |
           set -euo pipefail
+          mkdir -p results/openvins/MH_01_easy/raw
           docker pull "$OPENVINS_IMAGE"
           docker run --rm \
             -e OPENVINS_REVISION="$OPENVINS_REVISION" \
@@ -141,42 +142,12 @@ jobs:
                 -r -y
               cd "$ws"
               catkin_make -DCMAKE_BUILD_TYPE=Release -j2
-            '
-
-      - name: Run pinned OpenVINS serial estimator without ground truth
-        run: |
-          set -euo pipefail
-          mkdir -p results/openvins/MH_01_easy/raw
-          # Runtime dependency installation requires root inside the fresh container.
-          docker run --rm \
-            --user 0:0 \
-            --entrypoint /bin/bash \
-            -e OPENVINS_REVISION="$OPENVINS_REVISION" \
-            -v "$PWD:/workspace" \
-            -w /workspace \
-            "$OPENVINS_IMAGE" \
-            -c '
-              set -eo pipefail
-              test "$(id -u)" -eq 0 || { echo "Runtime container must execute as root" >&2; exit 1; }
-              # ROS/catkin setup scripts may read variables before initializing them.
-              # Source them before enabling nounset in our own runtime commands.
-              source /opt/ros/noetic/setup.bash
-              # The build and execution docker runs use separate ephemeral containers.
-              # Catkin's cached workspace does not cache apt-installed shared libraries.
-              # Reinstall the pinned estimator's ROS/system dependencies in this
-              # runtime container before loading the executable (libceres.so.1).
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update
-              apt-get install -y --no-install-recommends git python3-rosdep
-              rosdep update
-              rosdep install \
-                --from-paths /workspace/.cache/openvins_noetic_ws/src \
-                --ignore-src \
-                --rosdistro noetic \
-                -r -y
-              source /workspace/.cache/openvins_noetic_ws/devel/setup.bash
+              # Run the estimator in this same container: rosdep-installed shared
+              # libraries (including Ceres) are not present in a fresh container.
+              set +u
+              source "$ws/devel/setup.bash"
               set -u
-              executable=/workspace/.cache/openvins_noetic_ws/devel/lib/ov_msckf/ros1_serial_msckf
+              executable="$ws/devel/lib/ov_msckf/ros1_serial_msckf"
               ldd "$executable" | tee /tmp/openvins-runtime-ldd.txt
               if grep -q "not found" /tmp/openvins-runtime-ldd.txt; then
                 echo "OpenVINS runtime dependencies unresolved" >&2
@@ -190,7 +161,7 @@ jobs:
                 sleep 1
               done
               rosparam list >/dev/null
-              cfg=/workspace/.cache/openvins_noetic_ws/src/open_vins/config/euroc_mav/estimator_config.yaml
+              cfg="$ws/src/open_vins/config/euroc_mav/estimator_config.yaml"
               bag=/workspace/data/openvins/MH_01_easy.bag
               out=/workspace/results/openvins/MH_01_easy/raw
               rosrun ov_msckf ros1_serial_msckf "$cfg" \
@@ -203,11 +174,16 @@ jobs:
                 _filepath_est:="$out/state_estimate.txt" \
                 _filepath_std:="$out/state_deviation.txt" \
                 _verbosity:=INFO
-              test -s "$out/state_estimate.txt"
-              test -s "$out/state_deviation.txt"
-              test "$(grep -vc "^#" "$out/state_estimate.txt")" -gt 10
-              test "$(grep -vc "^#" "$out/state_deviation.txt")" -gt 10
             ' 2>&1 | tee results/openvins/MH_01_easy/raw/runtime.log
+
+      - name: Validate pinned OpenVINS estimator exports
+        run: |
+          set -euo pipefail
+          out=results/openvins/MH_01_easy/raw
+          test -s "$out/state_estimate.txt"
+          test -s "$out/state_deviation.txt"
+          test "$(grep -vc '^#' "$out/state_estimate.txt")" -gt 10
+          test "$(grep -vc '^#' "$out/state_deviation.txt")" -gt 10
 
       - name: Create OpenVINS execution receipt
         run: |
