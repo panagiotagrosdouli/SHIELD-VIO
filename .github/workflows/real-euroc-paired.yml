@@ -330,6 +330,14 @@ jobs:
             unzip -tq "results/real_euroc/MH_01_easy/upstream_evo/${estimator}_ape.zip"
           done
 
+      - name: Audit real estimator drift versus ground-truth motion
+        run: |
+          python scripts/audit_real_euroc_accuracy.py \
+            --groundtruth data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv \
+            --baseline-metrics results/real_euroc/MH_01_easy/imu_only/metrics.json \
+            --visual-metrics results/real_euroc/MH_01_easy/opencv_rotation/metrics.json \
+            --output results/real_euroc/MH_01_easy/accuracy_audit.json
+
       - name: Run public-data failure-prediction vertical slice
         run: |
           python scripts/run_paper_vertical_slice.py \
