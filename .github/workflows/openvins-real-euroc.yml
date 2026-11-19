@@ -123,7 +123,12 @@ jobs:
               set -euo pipefail
               source /opt/ros/noetic/setup.bash
               export DEBIAN_FRONTEND=noninteractive
-              apt-get update
+              # Ubuntu Focal HTTP mirrors were unreachable in real run 44521357698.
+              # Switch Ubuntu apt sources to HTTPS and fail on stale index downloads.
+              sed -i -e "s|http://archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g" \
+                     -e "s|http://security.ubuntu.com/ubuntu|https://security.ubuntu.com/ubuntu|g" \
+                     /etc/apt/sources.list
+              apt-get update -o APT::Update::Error-Mode=any
               apt-get install -y --no-install-recommends git python3-rosdep
               ws=/workspace/.cache/openvins_noetic_ws
               mkdir -p "$ws/src"
