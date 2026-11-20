@@ -156,8 +156,11 @@ jobs:
             -w /workspace \
             "$OPENVINS_IMAGE" \
             -c '
-              set -euo pipefail
+              set -eo pipefail
               test "$(id -u)" -eq 0 || { echo "Runtime container must execute as root" >&2; exit 1; }
+              # ROS Noetic setup scripts reference environment variables that may be
+              # unset (including ROS_MASTER_URI). Source them before enabling nounset.
+              export ROS_MASTER_URI=http://localhost:11311
               source /opt/ros/noetic/setup.bash
               # The build and execution docker runs use separate ephemeral containers.
               # Catkin's cached workspace does not cache apt-installed shared libraries.
@@ -173,6 +176,7 @@ jobs:
                 --rosdistro noetic \
                 -r -y
               source /workspace/.cache/openvins_noetic_ws/devel/setup.bash
+              set -u
               executable=/workspace/.cache/openvins_noetic_ws/devel/lib/ov_msckf/ros1_serial_msckf
               ldd "$executable" | tee /tmp/openvins-runtime-ldd.txt
               if grep -q "not found" /tmp/openvins-runtime-ldd.txt; then
