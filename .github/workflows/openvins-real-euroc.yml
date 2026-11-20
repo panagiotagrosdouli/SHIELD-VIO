@@ -162,7 +162,6 @@ jobs:
               # unset (including ROS_MASTER_URI). Source them before enabling nounset.
               export ROS_MASTER_URI=http://localhost:11311
               source /opt/ros/noetic/setup.bash
-              set -u
               # The build and execution docker runs use separate ephemeral containers.
               # Catkin's cached workspace does not cache apt-installed shared libraries.
               # Reinstall the pinned estimator's ROS/system dependencies in this
@@ -177,6 +176,7 @@ jobs:
                 --rosdistro noetic \
                 -r -y
               source /workspace/.cache/openvins_noetic_ws/devel/setup.bash
+              set -u
               executable=/workspace/.cache/openvins_noetic_ws/devel/lib/ov_msckf/ros1_serial_msckf
               ldd "$executable" | tee /tmp/openvins-runtime-ldd.txt
               if grep -q "not found" /tmp/openvins-runtime-ldd.txt; then
