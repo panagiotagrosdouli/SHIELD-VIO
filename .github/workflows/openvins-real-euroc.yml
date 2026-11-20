@@ -113,7 +113,11 @@ jobs:
         run: |
           set -euo pipefail
           docker pull "$OPENVINS_IMAGE"
-          docker run --rm \
+          # Persist the installed ROS dependencies in the image used at runtime.
+          # The catkin workspace itself remains on the mounted host volume.
+          container=shield-vio-openvins-build
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker run --name "$container" \
             -e OPENVINS_REVISION="$OPENVINS_REVISION" \
             -v "$PWD:/workspace" \
             -w /workspace \
@@ -142,6 +146,9 @@ jobs:
               cd "$ws"
               catkin_make -DCMAKE_BUILD_TYPE=Release -j2
             '
+          docker commit "$container" shield-vio-openvins:runtime >/dev/null
+          docker rm "$container" >/dev/null
+          trap - EXIT
 
       - name: Run pinned OpenVINS serial estimator without ground truth
         run: |
@@ -154,7 +161,7 @@ jobs:
             -e OPENVINS_REVISION="$OPENVINS_REVISION" \
             -v "$PWD:/workspace" \
             -w /workspace \
-            "$OPENVINS_IMAGE" \
+            shield-vio-openvins:runtime \
             -c '
               set -eo pipefail
               test "$(id -u)" -eq 0 || { echo "Runtime container must execute as root" >&2; exit 1; }
@@ -162,19 +169,8 @@ jobs:
               # unset (including ROS_MASTER_URI). Source them before enabling nounset.
               export ROS_MASTER_URI=http://localhost:11311
               source /opt/ros/noetic/setup.bash
-              # The build and execution docker runs use separate ephemeral containers.
-              # Catkin's cached workspace does not cache apt-installed shared libraries.
-              # Reinstall the pinned estimator's ROS/system dependencies in this
-              # runtime container before loading the executable (libceres.so.1).
-              export DEBIAN_FRONTEND=noninteractive
-              apt-get update
-              apt-get install -y --no-install-recommends git python3-rosdep
-              rosdep update
-              rosdep install \
-                --from-paths /workspace/.cache/openvins_noetic_ws/src \
-                --ignore-src \
-                --rosdistro noetic \
-                -r -y
+              # The image was committed after the successful build-time
+              # dependency installation; no runtime apt operations are needed.
               source /workspace/.cache/openvins_noetic_ws/devel/setup.bash
               set -u
               executable=/workspace/.cache/openvins_noetic_ws/devel/lib/ov_msckf/ros1_serial_msckf
