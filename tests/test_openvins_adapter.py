@@ -224,3 +224,27 @@ def test_openvins_adapter_feeds_primary_v2_observable_pipeline(tmp_path: Path) -
     result = build_primary_failure_targets(table, definition)
     assert result.definition_version == "SHIELD_VIO_FAILURE_V2"
     assert result.complete_observability_mask.sum() >= 3
+
+
+def test_openvins_adapter_drops_stale_camera_frames(tmp_path: Path) -> None:
+    sequence = tmp_path / "MH_fixture"
+    _write_camera(sequence)
+    # Camera data continues long after the last exported OpenVINS state.
+    camera_root = sequence / "mav0/cam0"
+    stale_timestamp = 5_000_000_000
+    (camera_root / "data" / f"{stale_timestamp}.png").write_bytes(b"fixture")
+    with (camera_root / "data.csv").open("a", encoding="utf-8", newline="") as stream:
+        csv.writer(stream).writerow([stale_timestamp, f"{stale_timestamp}.png"])
+    estimate, deviation = _write_openvins(tmp_path)
+    output = tmp_path / "run"
+
+    manifest = import_openvins_total_state(
+        estimate, deviation, sequence, output, adapter_config=_config(), evaluate=False
+    )
+
+    assert manifest["dropped_stale_camera_frames"] == 1
+    assert manifest["state_age_seconds"]["allowed_max"] == pytest.approx(0.5)
+    assert manifest["trajectory_rows"] == 5
+    with (output / "trajectory.csv").open(newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    assert all(int(row["frame_timestamp_ns"]) != stale_timestamp for row in rows)

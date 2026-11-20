@@ -5,6 +5,7 @@ source_export:
   deviation_file: state_deviation.txt
   estimate_format: openvins_total_state
   deviation_format: openvins_state_standard_deviation
+max_state_age_seconds: 0.5
 time_semantics:
   estimate_timestamp_clock: imu
   camera_time_formula: timestamp_in_imu_clock_minus_estimated_cam_to_imu_offset
