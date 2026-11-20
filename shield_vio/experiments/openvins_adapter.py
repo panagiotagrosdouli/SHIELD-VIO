@@ -177,8 +177,20 @@ def import_openvins_total_state(
     valid = latest_state >= 0
     if not np.any(valid):
         raise ValueError("no camera frame has an OpenVINS state at or before it")
-    frame_ns = frame_ns[valid]
-    latest_state = latest_state[valid]
+
+    # A last-known state is not an indefinitely valid estimate. In particular,
+    # the serial estimator can stop exporting before the camera stream ends.
+    max_age_s = float(config.get("max_state_age_seconds", 0.5))
+    if not np.isfinite(max_age_s) or max_age_s <= 0:
+        raise ValueError("max_state_age_seconds must be a finite positive number")
+    ages_ns = np.zeros(len(frame_ns), dtype=np.int64)
+    ages_ns[valid] = frame_ns[valid] - state_ns[latest_state[valid]]
+    fresh = valid & (ages_ns >= 0) & (ages_ns <= max_age_s * 1e9)
+    dropped_stale = int(np.count_nonzero(valid & ~fresh))
+    if not np.any(fresh):
+        raise ValueError("no camera frame has a sufficiently recent OpenVINS state")
+    frame_ns = frame_ns[fresh]
+    latest_state = latest_state[fresh]
 
     destination.mkdir(parents=True, exist_ok=True)
     trajectory_path = destination / "trajectory.csv"
@@ -297,7 +309,9 @@ def import_openvins_total_state(
         "state_age_seconds": {
             "median": float(np.median(state_ages)),
             "max": float(np.max(state_ages)),
+            "allowed_max": max_age_s,
         },
+        "dropped_stale_camera_frames": dropped_stale,
         "source_artifact_sha256": {
             estimate.name: _sha256(estimate),
             deviation.name: _sha256(deviation),
