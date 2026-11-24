@@ -82,6 +82,78 @@ def estimate_acceleration_from_position(
     return result
 
 
+def _so3_log(rotation: np.ndarray) -> np.ndarray:
+    cosine = float(np.clip((np.trace(rotation) - 1.0) / 2.0, -1.0, 1.0))
+    angle = math.acos(cosine)
+    vector = np.array([
+        rotation[2, 1] - rotation[1, 2],
+        rotation[0, 2] - rotation[2, 0],
+        rotation[1, 0] - rotation[0, 1],
+    ])
+    if angle < 1e-8:
+        return 0.5 * vector
+    return angle * vector / (2.0 * math.sin(angle))
+
+
+def audit_gyro_frames(
+    imu_timestamps_s: np.ndarray,
+    measured_gyro_radps: np.ndarray,
+    gt_timestamps_s: np.ndarray,
+    gt_orientations_wxyz: np.ndarray,
+    *,
+    max_gap_s: float = 0.01,
+) -> dict[str, Any]:
+    """Compare raw gyro with body angular rate from consecutive GT orientations."""
+    ti = np.asarray(imu_timestamps_s, dtype=float)
+    gyro = np.asarray(measured_gyro_radps, dtype=float)
+    tg = np.asarray(gt_timestamps_s, dtype=float)
+    q = np.asarray(gt_orientations_wxyz, dtype=float)
+    if ti.ndim != 1 or gyro.shape != (len(ti), 3):
+        raise ValueError("IMU timestamps and gyroscope must have shapes (N,) and (N,3)")
+    if tg.ndim != 1 or q.shape != (len(tg), 4) or len(tg) < 3:
+        raise ValueError("ground-truth timestamps and orientations must have shapes (M,) and (M,4)")
+    if np.any(np.diff(ti) <= 0) or np.any(np.diff(tg) <= 0):
+        raise ValueError("timestamps must be strictly increasing")
+    if not np.all(np.isfinite(gyro)) or not np.all(np.isfinite(q)):
+        raise ValueError("gyroscope and orientations must be finite")
+    rotations = np.asarray([rotation_wxyz(value) for value in q])
+    dt = np.diff(tg)
+    midpoint_t = 0.5 * (tg[:-1] + tg[1:])
+    angular_rate_body = np.asarray([
+        _so3_log(rotations[i].T @ rotations[i + 1]) / dt[i]
+        for i in range(len(dt))
+    ])
+    right = np.searchsorted(ti, midpoint_t, side="left")
+    candidates = np.stack([
+        np.clip(right - 1, 0, len(ti) - 1),
+        np.clip(right, 0, len(ti) - 1),
+    ], axis=1)
+    distances = np.abs(ti[candidates] - midpoint_t[:, None])
+    slot = np.argmin(distances, axis=1)
+    indices = candidates[np.arange(len(midpoint_t)), slot]
+    valid = distances[np.arange(len(midpoint_t)), slot] <= max_gap_s
+    if int(valid.sum()) < 10:
+        raise ValueError("fewer than ten gyro samples associate with ground-truth orientation changes")
+    measured = gyro[indices[valid]]
+    expected = angular_rate_body[valid]
+    direct_residual = measured - expected
+    reverse_residual = measured + expected
+    bias = np.mean(direct_residual, axis=0)
+    return {
+        "associated_intervals": int(valid.sum()),
+        "direct_body_rate_rmse_radps": float(np.sqrt(np.mean(direct_residual**2))),
+        "direct_body_rate_rmse_after_constant_bias_removal_radps": float(
+            np.sqrt(np.mean((direct_residual - bias) ** 2))
+        ),
+        "estimated_constant_gyro_bias_radps": bias.tolist(),
+        "reversed_orientation_rate_rmse_radps": float(np.sqrt(np.mean(reverse_residual**2))),
+        "claim_boundary": (
+            "Post-hoc gyro convention diagnostic from finite differences of ground-truth "
+            "orientation; not a bias-calibration result for an estimator."
+        ),
+    }
+
+
 def audit_imu_frames(
     imu: np.ndarray,
     groundtruth: np.ndarray,
@@ -149,6 +221,7 @@ def audit_imu_frames(
                     "p95_residual_norm_mps2": float(np.percentile(np.linalg.norm(residual, axis=1), 95)),
                 }
 
+    gyro_audit = audit_gyro_frames(ti, imu[:, 1:4], tg, gt[:, 4:8], max_gap_s=max_gap_s)
     first_rotation = rotation_wxyz(gt[0, 4:8])
     body_down = first_rotation.T @ np.array([0.0, 0.0, -1.0])
     initial_tilt_deg = math.degrees(math.acos(float(np.clip(body_down[2], -1.0, 1.0))))
@@ -165,6 +238,7 @@ def audit_imu_frames(
         "smoothing_window_samples": smoothing_window_samples,
         "median_raw_accel_norm_mps2": float(np.median(accel_norm)),
         "median_raw_gyro_norm_radps": float(np.median(np.linalg.norm(gyro, axis=1))),
+        "gyro_rotation_derivative_audit": gyro_audit,
         "initial_gt_body_down_tilt_from_identity_deg": initial_tilt_deg,
         "groundtruth_velocity_derivative_convention_scores": conventions,
         "best_scoring_convention": best,
