@@ -11,22 +11,26 @@ import yaml
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/openvins-real-euroc.yml"
 
 
-def _runtime_command() -> str:
+def _command(name: str) -> str:
     workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
     jobs = workflow["jobs"]["mh01-openvins"]["steps"]
     matches = [
         step["run"]
         for step in jobs
-        if step.get("name") == "Run pinned OpenVINS serial estimator without ground truth"
+        if step.get("name") == name
     ]
-    assert len(matches) == 1, "expected exactly one OpenVINS runtime step"
+    assert len(matches) == 1, f"expected exactly one step: {name}"
     return matches[0]
 
 
-def test_rosdep_runtime_arguments_are_single_backslash_continuations() -> None:
-    script = _runtime_command()
+def _runtime_command() -> str:
+    return _command("Run pinned OpenVINS serial estimator without ground truth")
+
+
+def test_rosdep_build_arguments_are_single_backslash_continuations() -> None:
+    script = _command("Build pinned OpenVINS serial estimator")
     match = re.search(r"rosdep install(?:[^\n]*\n){1,6}", script)
-    assert match, "runtime step must install ROS dependencies"
+    assert match, "build step must install ROS dependencies"
     snippet = match.group(0)
     assert "--from-paths" in snippet
     assert "--ignore-src" in snippet
@@ -45,3 +49,14 @@ def test_runtime_does_not_supply_ground_truth_to_estimator() -> None:
     assert "_path_bag:" in script
     assert "_filepath_est:" in script
     assert "ground_truth" not in script
+
+
+def test_runtime_reuses_image_with_installed_dependencies() -> None:
+    build = _command("Build pinned OpenVINS serial estimator")
+    runtime = _runtime_command()
+    assert 'docker commit "$container" shield-vio-openvins:runtime' in build
+    assert "shield-vio-openvins:runtime" in runtime
+    assert "rosdep install" not in runtime
+    assert "apt-get install" not in runtime
+    assert 'ldd "$executable"' in runtime
+    assert 'grep -q "not found"' in runtime
