@@ -137,6 +137,8 @@ jobs:
               git -C "$ws/src/open_vins" fetch origin "$OPENVINS_REVISION" --depth 1
               git -C "$ws/src/open_vins" checkout --detach "$OPENVINS_REVISION"
               test "$(git -C "$ws/src/open_vins" rev-parse HEAD)" = "$OPENVINS_REVISION"
+              git -C "$ws/src/open_vins" apply /workspace/patches/openvins/headless-disable-image-transport.patch
+              git -C "$ws/src/open_vins" diff --check
               rosdep update
               rosdep install \
                 --from-paths "$ws/src" \
@@ -191,6 +193,7 @@ jobs:
               bag=/workspace/data/openvins/MH_01_easy.bag
               out=/workspace/results/openvins/MH_01_easy/raw
               rosrun ov_msckf ros1_serial_msckf "$cfg" \
+                __name:=ros1_serial_msckf \
                 _path_bag:="$bag" \
                 _bag_start:=40.0 \
                 _bag_durr:=-1.0 \
@@ -225,6 +228,8 @@ jobs:
               "estimator": "openvins",
               "openvins_revision": "69488123ed9362dd44b6f28e7f4680abbff1442b",
               "container_image": "osrf/ros:noetic-desktop-full",
+              "visualization_transport": "headless_source_patch_no_image_transport_publishers",
+              "visualization_patch_sha256": sha("patches/openvins/headless-disable-image-transport.patch"),
               "bag_sha256": "57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9",
               "bag_start_seconds": 40.0,
               "use_stereo": True,
