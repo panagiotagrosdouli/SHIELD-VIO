@@ -30,7 +30,12 @@ def stereo_transform_right_left(
     return transform
 
 
-def build_stereo_pnp_provider(sequence_root: Path) -> StereoPnPVisualProvider:
+def build_stereo_pnp_provider(
+    sequence_root: Path,
+    *,
+    position_std_m: float = 0.08,
+    rotation_std_rad: float = 0.04,
+) -> StereoPnPVisualProvider:
     """Build the metric stereo-PnP provider from EuRoC cam0/cam1 calibration files."""
     calibration_root = sequence_root / "mav0"
     left = load_camera_calibration(calibration_root / "cam0" / "sensor.yaml")
@@ -51,7 +56,12 @@ def build_stereo_pnp_provider(sequence_root: Path) -> StereoPnPVisualProvider:
         left_distortion_coefficients=left.distortion_coefficients,
         right_distortion_coefficients=right.distortion_coefficients,
     )
-    return StereoPnPVisualProvider(frontend, left.transform_body_sensor)
+    return StereoPnPVisualProvider(
+        frontend,
+        left.transform_body_sensor,
+        position_std_m=position_std_m,
+        rotation_std_rad=rotation_std_rad,
+    )
 
 
 def main() -> None:
@@ -76,6 +86,8 @@ def main() -> None:
     parser.add_argument("--max-gap", type=float, default=0.02, help="Maximum timestamp association gap in seconds")
     parser.add_argument("--rpe-delta", type=int, default=1, help="RPE displacement interval in associated samples")
     parser.add_argument("--with-scale", action="store_true", help="Use Sim(3) instead of SE(3) alignment")
+    parser.add_argument("--stereo-position-std-m", type=float, default=0.08, help="Stereo pose position residual standard deviation in meters")
+    parser.add_argument("--stereo-rotation-std-rad", type=float, default=0.04, help="Stereo pose rotation residual standard deviation in radians")
     args = parser.parse_args()
 
     visual_provider = None
@@ -89,7 +101,18 @@ def main() -> None:
     elif args.stereo_pnp:
         if args.camera != "cam0":
             parser.error("--stereo-pnp requires --camera cam0 because cam1 is the paired right stream")
-        visual_provider = build_stereo_pnp_provider(args.sequence_root)
+        if (
+            not np.isfinite(args.stereo_position_std_m)
+            or args.stereo_position_std_m <= 0
+            or not np.isfinite(args.stereo_rotation_std_rad)
+            or args.stereo_rotation_std_rad <= 0
+        ):
+            parser.error("stereo pose standard deviations must be finite and positive")
+        visual_provider = build_stereo_pnp_provider(
+            args.sequence_root,
+            position_std_m=args.stereo_position_std_m,
+            rotation_std_rad=args.stereo_rotation_std_rad,
+        )
 
     backend = (
         None

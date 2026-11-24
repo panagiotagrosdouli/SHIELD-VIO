@@ -317,6 +317,24 @@ jobs:
             cat "$output"
           fi
 
+      - name: Run fivefold stereo pose covariance sensitivity
+        run: |
+          sequence=data/euroc/MH_01_easy
+          result=results/real_euroc/MH_01_easy/stereo_pnp_covariance_5x
+          report=results/real_euroc/MH_01_easy/stereo_pnp_covariance_5x_diagnostic.json
+          if [[ -f "$sequence/mav0/cam1/sensor.yaml" && -f "$sequence/mav0/cam1/data.csv" && -d "$sequence/mav0/cam1/data" ]]; then
+            python scripts/run_euroc.py "$sequence" \
+              --output "$result" \
+              --stereo-pnp \
+              --stereo-position-std-m 0.4 \
+              --stereo-rotation-std-rad 0.2
+            python scripts/audit_euroc_stereo_pnp.py "$result" --output "$report"
+            cat "$result/metrics.json"
+          else
+            cp results/real_euroc/MH_01_easy/stereo_pnp/stereo_status.json "$report"
+            cat "$report"
+          fi
+
       - name: Sweep gyro-bias prior covariance on real EuRoC
         run: |
           python - <<'PY'
