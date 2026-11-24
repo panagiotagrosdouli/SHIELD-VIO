@@ -228,6 +228,9 @@ def run_synchronized_frames(
                         estimator.health().innovation_nis,
                     ]
                 )
+            state_updated = getattr(visual_provider, "on_state_updated", None)
+            if callable(state_updated):
+                state_updated(packet, estimator.snapshot())
 
         trajectory_rows.append(_state_row(packet.frame.timestamp_ns, estimator.snapshot()))
         health_rows.append(_health_row(packet.frame.timestamp_ns, estimator.health()))
