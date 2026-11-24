@@ -102,27 +102,41 @@ def _matrix_payload(matrix: Any) -> dict[str, Any]:
     return {"rows": 4, "cols": 4, "data": values.reshape(-1).tolist()}
 
 
+def _camera_calibration_payload(camera: dict[str, Any], camera_name: str) -> dict[str, Any]:
+    return {
+        "sensor_type": "camera",
+        "comment": f"EuRoC {camera_name} calibration translated from pinned OpenVINS config",
+        "T_BS": _matrix_payload(camera["T_imu_cam"]),
+        "rate_hz": 20.0,
+        "resolution": [int(value) for value in camera["resolution"]],
+        "camera_model": str(camera["camera_model"]),
+        "intrinsics": [float(value) for value in camera["intrinsics"]],
+        "distortion_model": str(camera["distortion_model"]),
+        "distortion_coefficients": [float(value) for value in camera["distortion_coeffs"]],
+    }
+
+
+def build_asl_camera_calibration(imucam_path: Path, camera_name: str) -> dict[str, Any]:
+    """Translate one OpenVINS camera mapping into the ASL calibration schema."""
+    imucam = _yaml_mapping(imucam_path)
+    camera = imucam.get(camera_name)
+    if not isinstance(camera, dict):
+        raise ValueError(f"OpenVINS calibration must contain a {camera_name} mapping")
+    payload = _camera_calibration_payload(camera, camera_name)
+    if payload["resolution"] != [752, 480]:
+        raise ValueError(f"unexpected EuRoC {camera_name} resolution")
+    return payload
+
+
 def build_asl_calibrations(imucam_path: Path, imu_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     """Translate pinned OpenVINS EuRoC calibration YAML into SHIELD-VIO's ASL parser schema."""
 
-    imucam = _yaml_mapping(imucam_path)
+    camera = build_asl_camera_calibration(imucam_path, "cam0")
     imu = _yaml_mapping(imu_path)
-    cam0 = imucam.get("cam0")
     imu0 = imu.get("imu0")
-    if not isinstance(cam0, dict) or not isinstance(imu0, dict):
-        raise ValueError("OpenVINS calibration must contain cam0 and imu0 mappings")
+    if not isinstance(imu0, dict):
+        raise ValueError("OpenVINS calibration must contain an imu0 mapping")
 
-    camera = {
-        "sensor_type": "camera",
-        "comment": "EuRoC cam0 calibration translated from pinned OpenVINS config",
-        "T_BS": _matrix_payload(cam0["T_imu_cam"]),
-        "rate_hz": 20.0,
-        "resolution": [int(value) for value in cam0["resolution"]],
-        "camera_model": str(cam0["camera_model"]),
-        "intrinsics": [float(value) for value in cam0["intrinsics"]],
-        "distortion_model": str(cam0["distortion_model"]),
-        "distortion_coefficients": [float(value) for value in cam0["distortion_coeffs"]],
-    }
     inertial = {
         "sensor_type": "imu",
         "comment": "EuRoC imu0 calibration translated from pinned OpenVINS config",
@@ -133,8 +147,6 @@ def build_asl_calibrations(imucam_path: Path, imu_path: Path) -> tuple[dict[str,
         "accelerometer_noise_density": float(imu0["accelerometer_noise_density"]),
         "accelerometer_random_walk": float(imu0["accelerometer_random_walk"]),
     }
-    if camera["resolution"] != [752, 480]:
-        raise ValueError("unexpected EuRoC cam0 resolution")
     return camera, inertial
 
 
@@ -264,21 +276,11 @@ def convert_rosbag(
     )
     imucam_payload = _yaml_mapping(openvins_imucam_calibration)
     camera1_source = imucam_payload.get("cam1")
-    camera1_calibration = None
-    if isinstance(camera1_source, dict):
-        camera1_calibration = {
-            "sensor_type": "camera",
-            "comment": "EuRoC cam1 calibration translated from pinned OpenVINS config",
-            "T_BS": _matrix_payload(camera1_source["T_imu_cam"]),
-            "rate_hz": 20.0,
-            "resolution": [int(value) for value in camera1_source["resolution"]],
-            "camera_model": str(camera1_source["camera_model"]),
-            "intrinsics": [float(value) for value in camera1_source["intrinsics"]],
-            "distortion_model": str(camera1_source["distortion_model"]),
-            "distortion_coefficients": [
-                float(value) for value in camera1_source["distortion_coeffs"]
-            ],
-        }
+    camera1_calibration = (
+        _camera_calibration_payload(camera1_source, "cam1")
+        if isinstance(camera1_source, dict)
+        else None
+    )
     _write_yaml(output_root / "mav0/cam0/sensor.yaml", camera_calibration)
     _write_yaml(output_root / "mav0/imu0/sensor.yaml", imu_calibration)
     gt_count = convert_openvins_ground_truth(
