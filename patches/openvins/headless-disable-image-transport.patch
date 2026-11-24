@@ -1,0 +1,30 @@
+diff --git a/ov_msckf/src/ros/ROS1Visualizer.cpp b/ov_msckf/src/ros/ROS1Visualizer.cpp
+--- a/ov_msckf/src/ros/ROS1Visualizer.cpp
++++ b/ov_msckf/src/ros/ROS1Visualizer.cpp
+@@ -42,8 +42,8 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
+   mTfBr = std::make_shared<tf::TransformBroadcaster>();
+ 
+-  // Create image transport
+-  image_transport::ImageTransport it(*_nh);
++  // Offline serial replay has no visualization subscribers. Keep the
++  // image_transport publishers default-constructed to avoid loading plugins.
+ 
+   // Setup pose and path publisher
+   pub_poseimu = nh->advertise<geometry_msgs::PoseWithCovarianceStamped>("poseimu", 2);
+@@ -63,8 +63,6 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
+   pub_points_sim = nh->advertise<sensor_msgs::PointCloud2>("points_sim", 2);
+   PRINT_DEBUG("Publishing: %s\\n", pub_points_sim.getTopic().c_str());
+ 
+-  // Our tracking image
+-  it_pub_tracks = it.advertise("trackhist", 2);
+   PRINT_DEBUG("Publishing: %s\\n", it_pub_tracks.getTopic().c_str());
+ 
+   // Groundtruth publishers
+@@ -77,9 +75,6 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
+   pub_loop_point = nh->advertise<sensor_msgs::PointCloud>("loop_feats", 2);
+   pub_loop_extrinsic = nh->advertise<nav_msgs::Odometry>("loop_extrinsic", 2);
+   pub_loop_intrinsics = nh->advertise<sensor_msgs::CameraInfo>("loop_intrinsics", 2);
+-  it_pub_loop_img_depth = it.advertise("loop_depth", 2);
+-  it_pub_loop_img_depth_color = it.advertise("loop_depth_colored", 2);
+ 
+   // option to enable publishing of global to IMU transformation
