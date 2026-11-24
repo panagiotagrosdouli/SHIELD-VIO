@@ -213,7 +213,7 @@ jobs:
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
 
-      - name: Test opt-in stationary-IMU initial attitude on real EuRoC
+      - name: Sweep stationary-IMU gravity initialization windows on real EuRoC
         run: |
           python - <<'PY'
           import json
@@ -222,46 +222,52 @@ jobs:
           from pathlib import Path
 
           root = Path("results/real_euroc/MH_01_easy")
-          cmd = [
-              sys.executable,
-              "scripts/run_euroc.py",
-              "data/euroc/MH_01_easy",
-              "--output", str(root / "gravity_aligned_imu"),
-              "--gravity-align-window", "100",
-          ]
-          completed = subprocess.run(cmd, capture_output=True, text=True)
           baseline = json.loads((root / "imu_only" / "metrics.json").read_text())
+          windows = [10, 20, 50, 100, 200, 400]
+          results = []
+          for window in windows:
+              output = root / "gravity_window_sweep" / f"window_{window}"
+              cmd = [
+                  sys.executable,
+                  "scripts/run_euroc.py",
+                  "data/euroc/MH_01_easy",
+                  "--output", str(output),
+                  "--gravity-align-window", str(window),
+              ]
+              completed = subprocess.run(cmd, capture_output=True, text=True)
+              item = {
+                  "window_samples": window,
+                  "window_duration_s_at_200_hz": window / 200.0,
+                  "ground_truth_used_for_initialization": False,
+              }
+              if completed.returncode == 0:
+                  aligned = json.loads((output / "metrics.json").read_text())
+                  item.update({
+                      "status": "measured",
+                      "gravity_aligned_ate_rmse_m": aligned["ate_rmse_m"],
+                      "ate_relative_change": aligned["ate_rmse_m"] / baseline["ate_rmse_m"] - 1.0,
+                  })
+              elif "IMU initialization window is not sufficiently stationary" in completed.stderr:
+                  item.update({
+                      "status": "rejected_nonstationary",
+                      "gravity_aligned_ate_rmse_m": None,
+                      "reason": "Window failed the frozen stationarity checks; no aligned result was produced.",
+                  })
+              else:
+                  raise SystemExit(
+                      f"Unexpected gravity-alignment failure at N={window}:\n" + completed.stderr
+                  )
+              results.append(item)
           report = {
               "dataset": "EuRoC MH_01_easy",
               "initialization": "stationary IMU roll/pitch only",
-              "window_samples": 100,
               "baseline_ate_rmse_m": baseline["ate_rmse_m"],
               "confirmatory": False,
               "ground_truth_used_for_initialization": False,
               "yaw_observable": False,
+              "windows": results,
+              "claim_boundary": "Development-only window sweep; accepted windows do not establish estimator accuracy.",
           }
-          if completed.returncode == 0:
-              aligned = json.loads(
-                  (root / "gravity_aligned_imu" / "metrics.json").read_text()
-              )
-              report.update({
-                  "status": "measured",
-                  "gravity_aligned_ate_rmse_m": aligned["ate_rmse_m"],
-                  "ate_relative_change": (
-                      aligned["ate_rmse_m"] / baseline["ate_rmse_m"] - 1.0
-                  ),
-              })
-          elif "IMU initialization window is not sufficiently stationary" in completed.stderr:
-              report.update({
-                  "status": "rejected_nonstationary",
-                  "gravity_aligned_ate_rmse_m": None,
-                  "reason": "The observed IMU window violates stationary alignment prerequisites; no result was fabricated.",
-              })
-          else:
-              raise SystemExit(
-                  "Unexpected gravity-alignment failure (not a scientific rejection):\n"
-                  + completed.stderr
-              )
           (root / "gravity_alignment_experiment.json").write_text(
               json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
           )
