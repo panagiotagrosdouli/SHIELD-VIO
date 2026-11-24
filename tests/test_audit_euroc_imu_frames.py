@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from scripts.audit_euroc_imu_frames import (
+    audit_gyro_frames,
     audit_imu_frames,
     estimate_acceleration_from_position,
     world_acceleration_from_specific_force,
@@ -54,3 +55,25 @@ def test_pose_only_groundtruth_is_supported() -> None:
     report = audit_imu_frames(imu, gt)
     assert report["associated_samples"] == len(t)
     assert report["reference_acceleration_source"] == "smoothed_groundtruth_position_second_derivative"
+
+
+
+def test_gyro_audit_recovers_constant_bias_and_orientation_direction() -> None:
+    gt_t = np.arange(101, dtype=float) * 0.005
+    imu_t = gt_t[:-1] + 0.0025
+    angular_rate = np.array([0.08, -0.04, 0.12])
+    bias = np.array([0.01, -0.02, 0.03])
+    axis = angular_rate / np.linalg.norm(angular_rate)
+    orientations = []
+    for t in gt_t:
+        angle = np.linalg.norm(angular_rate) * t
+        orientations.append(np.r_[np.cos(angle / 2), axis * np.sin(angle / 2)])
+    measured = np.tile(angular_rate + bias, (len(imu_t), 1))
+
+    report = audit_gyro_frames(
+        imu_t, measured, gt_t, np.asarray(orientations), max_gap_s=0.003
+    )
+
+    assert report["estimated_constant_gyro_bias_radps"] == pytest.approx(bias, abs=1e-10)
+    assert report["direct_body_rate_rmse_after_constant_bias_removal_radps"] < 1e-10
+    assert report["reversed_orientation_rate_rmse_radps"] > report["direct_body_rate_rmse_radps"]
