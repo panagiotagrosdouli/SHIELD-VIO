@@ -1,7 +1,7 @@
 # SHIELD-VIO Master Progress
 
 **Snapshot:** 2026-11-24 (UTC)  
-**Audited base:** `main` includes EuRoC drift-audit merge `d1e13061904c33fa1b46f915b9703a6ee72ff5b1`  
+**Audited base:** `main` includes synthetic runner merge `e760a0421034253ee1cca6c9b65ff5b76ea0699d`  
 **Purpose:** Track implementation and evidence without treating planned work, unit tests, synthetic runs, or an in-progress workflow as real benchmark validation.
 
 ## Status key
@@ -20,6 +20,7 @@
 | PR #105 | **Integrated:** merged to `main` at `7559dd5`; its CI run [45380153039](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45380153039) passed. It adds canonical held-out probability evaluation and explicitly limits the result to non-confirmatory probability metrics. |
 | PR #104 | **Integrated:** squash-merged as `0946e069`; CI [45382473614](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473614) and pinned OpenVINS `MH_01_easy` replay [45382473608](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473608) passed. Artifact `14915278229` (SHA-256 `366b13ee50c001bbda6999eaba9668e9a41ef94e6cbd67c06554e4978c7330cb`) records the headless patch digest, 138 s replay and 0.09214 m ATE RMSE. This is one non-confirmatory sequence smoke; primary failure labels have 0 events and 0 positive windows at all tested horizons, so detector discrimination is undefined. |
 | Synthetic seed provenance | PR #108 merged as `584874f`; CI [45385915303](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45385915303) passed. Reports now read the actual seed, with seed-42 and invalid-type regression coverage. |
+| Synthetic experiment runner | PR #112 merged as `e760a04`; full CI [45388990757](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45388990757) passed. Runner now has typed configuration, validated numeric bounds, a reproducibility manifest, summary/report/plots, synthetic-only claim boundary, and artifact tests. |
 | OpenVINS runtime regression coverage | PR #110 merged as `44dec65`; CI [45386831620](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45386831620) passed. PR #111 merged as `2ecf1b6`; CI [45387125611](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45387125611) passed, including ROS setup-before-nounset guard. |
 | Existing artifacts | `docs/publication/evidence/euroc_mh01_smoke_v1.json`; inspect its provenance and scope before using it as evidence. |
 | Repository shape | Existing Python estimator, experiment, evaluation, dataset, and test packages; no ROS 2 package, Dockerfile, or complete manuscript source was present in the audited main tree. |
@@ -63,7 +64,7 @@ The paired workflow reran both ESKF configurations, independent `evo` evaluation
 
 | Workstream | Status | Current implementation / evidence | Remaining acceptance criteria |
 |---|---|---|---|
-| Repository, PR, and CI audit | YELLOW | PRs #104, #105, #107–#111 are integrated; stale #5, #87, #90, #96 and #100 were closed as obsolete/superseded. PR #8 remains open, 326 commits behind, and needs adaptation review. No open issues were found in the audit. | Review PR #8 against current APIs, inspect remaining branches/workflows/artifacts, and keep this record current. |
+| Repository, PR, and CI audit | YELLOW | PRs #104, #105, #107–#111 are integrated; stale #5, #87, #90, #96 and #100 were closed as obsolete/superseded. PR #8 remains open, 326 commits behind, and needs adaptation review. No open issues were found in the audit. | Review remaining inactive branches and workflows, inspect experimental artifacts, and keep this record current. |
 | CI/CD and regression suite | YELLOW | Ruff, pytest, deterministic synthetic regression, and the real EuRoC smoke passed on PR #109 candidate; main CI run for the latest merged commit is not yet recorded. Earlier CLI-escaping failure was diagnosed and fixed before the passing run. | Run full required checks on the final release candidate, inspect failures instead of suppressing them, and confirm all required workflows pass on the release commit. |
 | VIO estimation backend | YELLOW | Research implementations exist for feature tracking, IMU preintegration, a 15-state ESKF, calibration/stereo geometry, trajectory output, and loop closure, with numerical/unit tests. README correctly calls these research prototypes. | Independently validate coordinate/quaternion conventions, Jacobians and covariance consistency; exercise complete calibrated camera–IMU synchronization, initialization/recovery, stereo and monocular pipelines; document limitations with measured evidence. |
 | EuRoC benchmark | RED | One checksum-verified `MH_01_easy` paired smoke completed. Both ESKF variants diverge catastrophically by 860–950× path length; OpenVINS has a separate successful 138 s smoke. All are non-confirmatory and only one sequence is tested. | Diagnose ESKF failure on development data; verify source identity; execute all 11 registered sequences under the frozen split; inspect outcomes and runtime; report grouped uncertainty. |
@@ -71,7 +72,7 @@ The paired workflow reran both ESKF configurations, independent `evo` evaluation
 | OpenVINS comparison | YELLOW | Pinned headless serial replay and V2 artifact pipeline pass for `MH_01_easy`; PR #104 records the fix. Artifact reports 0.09214 m ATE RMSE, but primary failure labels contain no events, so prediction discrimination is undefined. | Compare matched estimator inputs/conventions and assess additional EuRoC sequences; validate trajectory/covariance exports and cross-mode/version behavior. Keep failed runs visible. |
 | Failure prediction models | YELLOW | Causal health features, failure targets, split/leakage guards, rules/logistic infrastructure, and frozen predictor/canonical evaluation code exist. | Implement and fairly compare required tree and temporal models where data volume supports them; evaluate all horizons; prove sequence/preprocessing isolation and seal models before held-out scoring. |
 | Calibration and uncertainty | YELLOW | Calibration metrics, Platt/frozen predictor elements, conformal bounds and canonical held-out probability evaluation exist. | Verify independent calibration/test partitions; report Brier, NLL, ECE/MCE, reliability, risk–coverage and OOD outcomes; implement/justify temperature and isotonic comparisons; preserve the 0.2 false-alarm/min operating point where protocol requires it. |
-| Degradation and robustness | YELLOW | Synthetic degradation and scenario evaluation infrastructure exists. | Run paired, deterministic, predefined-severity experiments for each required visual, IMU, timing, packet-loss and calibration perturbation; report nominal/degraded results without test-driven tuning. |
+| Synthetic experiment reporting | GREEN for reproducible diagnostic outputs | PR #112 adds typed scenario configuration, deterministic run summaries, provenance manifest, report, plots, bounds checking, and artifact tests; CI run [45388990757](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45388990757) passed. Output remains synthetic-only evidence. | Use paired, predefined-severity scenarios with seeds and compare nominal/degraded metrics; do not use synthetic results as real estimator validation. |
 | Navigation shield | YELLOW | Stateful warning/slowdown/hold/halt/relocalization and recovery policy components have unit/closed-loop synthetic evidence. | Couple decisions to estimator failure outcomes; quantify risk reduction, false interventions and recovery success on matched sequences; validate state-machine transitions and conservative fallbacks; avoid unsupported formal guarantees. |
 | Ablations | WHITE | No verified full ablation matrix or matched results located. | Retrain each specified ablation with the same development protocol and compare on identical held-out sequences, conditions and seeds. |
 | ROS 2 and simulation | WHITE | No ROS 2 package or Dockerfile was present in the audited main tree. | Implement and test camera/IMU subscriptions, odometry/risk/diagnostic/shield publishers, launch/config/RViz, playback, supported simulator scenarios, ROS integration tests, and pinned reproducible container instructions. |
@@ -81,12 +82,12 @@ The paired workflow reran both ESKF configurations, independent `evo` evaluation
 
 ## Immediate execution queue
 
-1. Diagnose ESKF unit/frame, initialization, and propagation errors using a predeclared development-only protocol.
-2. Extend EuRoC execution across the frozen 11-sequence registry after the estimator is stable; preserve all failures.
-3. Review PR #8 against current APIs and close or adapt it based on a concrete code review.
-4. Freeze TUM-VI inventory/checksums and shifted-test rules before evaluating any sequence.
-5. Complete the remaining model comparisons, calibration/uncertainty, degradation, shield benefit, ablations, ROS 2/simulation, manuscript, and release gates.
-6. Record CI on the latest main commit and keep the benchmark status document synchronized.
+1. Diagnose the catastrophic ESKF drift using a predeclared development-only protocol for units, frames, initialization, and propagation.
+2. Extend EuRoC execution across the frozen 11-sequence registry after the estimator is stable; preserve all failed outcomes.
+3. Freeze TUM-VI inventory/checksums and shifted-test rules before evaluating any sequence.
+4. Implement and fairly compare the remaining prediction, calibration, robustness, and shield variants on valid development/test partitions.
+5. Build ROS 2 integration, matched ablations, sequence-level statistics, the manuscript, and release artifacts only from observed evidence.
+6. Record CI on each final candidate and keep benchmark status synchronized with artifacts.
 
 ## Decision rule
 
