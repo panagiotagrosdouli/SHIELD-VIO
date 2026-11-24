@@ -123,10 +123,16 @@ class StereoPnPFrontend:
         left_points = np.asarray([keypoints_left[m.queryIdx].pt for m in matches], dtype=float)
         right_points = np.asarray([keypoints_right[m.trainIdx].pt for m in matches], dtype=float)
         normalized_left = cv2.undistortPoints(
-            left_points.reshape(-1, 1, 2), None, None, P=self.left_camera_matrix
+            left_points.reshape(-1, 1, 2),
+            self.left_camera_matrix,
+            None,
+            P=self.left_camera_matrix
         ).reshape(-1, 2)
         normalized_right = cv2.undistortPoints(
-            right_points.reshape(-1, 1, 2), None, None, P=self.right_camera_matrix
+            right_points.reshape(-1, 1, 2),
+            self.right_camera_matrix,
+            None,
+            P=self.right_camera_matrix
         ).reshape(-1, 2)
         fundamental = _fundamental_from_calibration(
             self.left_camera_matrix,
