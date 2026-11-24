@@ -21,14 +21,14 @@ class CalibrationSummary:
 
 def _validate(probabilities: np.ndarray, labels: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     p = np.asarray(probabilities, dtype=float).reshape(-1)
-    y = np.asarray(labels, dtype=int).reshape(-1)
+    y = np.asarray(labels, dtype=float).reshape(-1)
     if p.shape != y.shape or p.size == 0:
         raise ValueError("probabilities and labels must be non-empty and equally sized")
     if np.any(~np.isfinite(p)) or np.any((p < 0.0) | (p > 1.0)):
         raise ValueError("probabilities must be finite values in [0, 1]")
-    if np.any((y != 0) & (y != 1)):
+    if np.any(~np.isfinite(y)) or np.any((y != 0) & (y != 1)):
         raise ValueError("labels must be binary")
-    return p, y
+    return p, y.astype(int)
 
 
 def brier_score(probabilities: np.ndarray, labels: np.ndarray) -> float:
