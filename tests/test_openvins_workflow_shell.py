@@ -60,6 +60,9 @@ def test_runtime_reuses_image_with_installed_dependencies() -> None:
     assert "apt-get update" not in runtime
     assert "apt-get install" not in runtime
     assert "source /workspace/.cache/openvins_noetic_ws/devel/setup.bash" in runtime
+    assert "export ROS_MASTER_URI=http://localhost:11311" in runtime
+    assert "set -eo pipefail" in runtime
+    assert runtime.index("source /opt/ros/noetic/setup.bash") < runtime.index("set -u")
     assert 'ldd "$executable"' in runtime
     assert 'grep -q "not found"' in runtime
 
