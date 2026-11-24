@@ -57,7 +57,9 @@ def test_runtime_reuses_image_with_installed_dependencies() -> None:
     assert 'docker commit "$container" shield-vio-openvins:runtime' in build
     assert "shield-vio-openvins:runtime" in runtime
     assert "rosdep install" not in runtime
+    assert "apt-get update" not in runtime
     assert "apt-get install" not in runtime
+    assert "source /workspace/.cache/openvins_noetic_ws/devel/setup.bash" in runtime
     assert 'ldd "$executable"' in runtime
     assert 'grep -q "not found"' in runtime
 
