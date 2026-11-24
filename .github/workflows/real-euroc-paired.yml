@@ -9,6 +9,8 @@ on:
       - 'scripts/run_paper_vertical_slice.py'
       - 'scripts/validate_public_smoke.py'
       - 'scripts/audit_real_euroc_accuracy.py'
+      - 'scripts/audit_euroc_orientation.py'
+      - 'tests/test_audit_euroc_orientation.py'
       - 'scripts/convert_euroc_rosbag.py'
       - 'scripts/export_primary_observables.py'
       - 'scripts/export_primary_failure_targets.py'
@@ -28,6 +30,8 @@ on:
       - 'scripts/run_euroc.py'
       - 'scripts/compare_real_euroc_runs.py'
       - 'scripts/audit_real_euroc_accuracy.py'
+      - 'scripts/audit_euroc_orientation.py'
+      - 'tests/test_audit_euroc_orientation.py'
       - 'scripts/validate_public_smoke.py'
       - 'scripts/convert_euroc_rosbag.py'
       - 'scripts/export_primary_observables.py'
@@ -340,6 +344,15 @@ jobs:
             --baseline-metrics results/real_euroc/MH_01_easy/imu_only/metrics.json \
             --visual-metrics results/real_euroc/MH_01_easy/opencv_rotation/metrics.json \
             --output results/real_euroc/MH_01_easy/accuracy_audit.json
+
+      - name: Audit position-aligned attitude error
+        run: |
+          python scripts/audit_euroc_orientation.py \
+            --groundtruth data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv \
+            --baseline-trajectory results/real_euroc/MH_01_easy/imu_only/trajectory.csv \
+            --visual-trajectory results/real_euroc/MH_01_easy/opencv_rotation/trajectory.csv \
+            --output results/real_euroc/MH_01_easy/attitude_alignment_diagnostic.json
+          cat results/real_euroc/MH_01_easy/attitude_alignment_diagnostic.json
 
       - name: Run public-data failure-prediction vertical slice
         run: |
