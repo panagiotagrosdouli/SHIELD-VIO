@@ -213,6 +213,14 @@ jobs:
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
 
+      - name: Run calibrated stereo-PnP metric-pose configuration
+        run: |
+          python scripts/run_euroc.py data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/stereo_pnp \
+            --stereo-pnp
+          cat results/real_euroc/MH_01_easy/stereo_pnp/metrics.json
+          cat results/real_euroc/MH_01_easy/stereo_pnp/experiment_manifest.json
+
       - name: Sweep stationary-IMU gravity initialization windows on real EuRoC
         run: |
           python - <<'PY'
