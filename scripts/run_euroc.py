@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from shield_vio.backends.eskf import ESKFBackend
 from shield_vio.datasets.calibration import CameraCalibration, load_camera_calibration
 from shield_vio.experiments.euroc_runner import run_euroc_sequence
 from shield_vio.experiments.opencv_visual_provider import (
@@ -62,6 +63,7 @@ def main() -> None:
     )
     parser.add_argument("--skip-evaluation", action="store_true", help="Do not compare against EuRoC ground truth")
     parser.add_argument("--gravity-align-window", type=int, default=0, help="Opt-in: align roll/pitch using a stationary first N IMU samples (>=10); reject dynamic windows")
+    parser.add_argument("--initial-gyro-bias-std-rps", type=float, default=None, help="Optional initial gyro-bias prior standard deviation in rad/s; default covariance is unchanged")
     parser.add_argument("--max-gap", type=float, default=0.02, help="Maximum timestamp association gap in seconds")
     parser.add_argument("--rpe-delta", type=int, default=1, help="RPE displacement interval in associated samples")
     parser.add_argument("--with-scale", action="store_true", help="Use Sim(3) instead of SE(3) alignment")
@@ -80,11 +82,17 @@ def main() -> None:
             parser.error("--stereo-pnp requires --camera cam0 because cam1 is the paired right stream")
         visual_provider = build_stereo_pnp_provider(args.sequence_root)
 
+    backend = (
+        None
+        if args.initial_gyro_bias_std_rps is None
+        else ESKFBackend(initial_gyro_bias_std_rps=args.initial_gyro_bias_std_rps)
+    )
     summary = run_euroc_sequence(
         args.sequence_root,
         args.output,
         camera=args.camera,
         visual_provider=visual_provider,
+        backend=backend,
         evaluate=not args.skip_evaluation,
         max_gap=args.max_gap,
         rpe_delta=args.rpe_delta,

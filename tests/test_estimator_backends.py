@@ -77,3 +77,22 @@ def test_eskf_backend_exposes_visual_innovation_health() -> None:
     health = backend.health()
     assert health.innovation_nis is not None
     assert health.innovation_nis >= 0.0
+
+
+def test_eskf_backend_configures_initial_gyro_bias_prior_variance() -> None:
+    default_backend = ESKFBackend()
+    default_state = default_backend.initialize(0)
+    assert np.diag(default_state.covariance)[12:15] == pytest.approx([1e-3] * 3)
+
+    prior_std_rps = 0.1
+    backend = ESKFBackend(initial_gyro_bias_std_rps=prior_std_rps)
+    state = backend.initialize(0)
+    assert np.diag(state.covariance)[12:15] == pytest.approx([prior_std_rps**2] * 3)
+
+
+@pytest.mark.parametrize("prior_std_rps", [0.0, -0.1, np.nan, np.inf])
+def test_eskf_backend_rejects_invalid_initial_gyro_bias_prior(
+    prior_std_rps: float,
+) -> None:
+    with pytest.raises(ValueError, match="finite and positive"):
+        ESKFBackend(initial_gyro_bias_std_rps=prior_std_rps)

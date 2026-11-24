@@ -224,6 +224,77 @@ jobs:
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
 
+      - name: Sweep gyro-bias prior covariance on real EuRoC
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+          import numpy as np
+
+          root = Path("results/real_euroc/MH_01_easy")
+          priors = [0.05, 0.1, 0.2]
+          baseline = json.loads((root / "opencv_rotation" / "metrics.json").read_text())
+          results = []
+          for std in priors:
+              output = root / "gyro_bias_prior_sweep" / f"std_{std:g}"
+              cmd = [
+                  sys.executable,
+                  "scripts/run_euroc.py",
+                  "data/euroc/MH_01_easy",
+                  "--output", str(output),
+                  "--opencv-rotation",
+                  "--initial-gyro-bias-std-rps", str(std),
+              ]
+              completed = subprocess.run(cmd, capture_output=True, text=True)
+              item = {
+                  "initial_gyro_bias_std_rps": std,
+                  "initial_gyro_bias_covariance_rps2": std**2,
+                  "ground_truth_used_for_initialization": False,
+              }
+              if completed.returncode == 0:
+                  metrics = json.loads((output / "metrics.json").read_text())
+                  with (output / "trajectory.csv").open(newline="") as stream:
+                      trajectory = list(csv.DictReader(stream))
+                  bias = np.asarray([[float(row[key]) for key in ("bgx", "bgy", "bgz")] for row in trajectory])
+                  item.update({
+                      "ate_rmse_m": metrics["ate_rmse_m"],
+                      "rpe_translation_rmse_m": metrics["rpe_translation_rmse_m"],
+                      "associated_samples": metrics["associated_samples"],
+                      "final_gyro_bias_rps": bias[-1].tolist(),
+                      "median_gyro_bias_rps": np.median(bias, axis=0).tolist(),
+                      "median_gyro_bias_norm_rps": float(np.median(np.linalg.norm(bias, axis=1))),
+                  })
+              else:
+                  item["error"] = completed.stderr[-4000:] or completed.stdout[-4000:]
+              results.append(item)
+              print(json.dumps(item, sort_keys=True))
+          report = {
+              "schema_version": 1,
+              "sequence": "MH_01_easy",
+              "visual_provider": "opencv_rotation",
+              "baseline_default_prior": {
+                  "ate_rmse_m": baseline["ate_rmse_m"],
+                  "rpe_translation_rmse_m": baseline["rpe_translation_rmse_m"],
+                  "associated_samples": baseline["associated_samples"],
+              },
+              "sweep": results,
+              "ground_truth_used_for_initialization": False,
+              "claim_boundary": (
+                  "Non-confirmatory development sensitivity diagnostic. Ground truth is used "
+                  "only for post-hoc metrics; varying the initial gyro-bias covariance does "
+                  "not establish an optimal prior or resolve estimator failure."
+              ),
+          }
+          destination = root / "gyro_bias_prior_sweep.json"
+          destination.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          print(destination.read_text())
+          if any("error" in item for item in results):
+              raise SystemExit("one or more gyro-bias prior sweep runs failed")
+          PY
+
       - name: Sweep stationary-IMU gravity initialization windows on real EuRoC
         run: |
           python - <<'PY'
