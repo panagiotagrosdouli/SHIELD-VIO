@@ -47,6 +47,30 @@ class _SyntheticVisualProvider:
         )
 
 
+class _VisualLifecycleProvider(_SyntheticVisualProvider):
+    def __init__(self) -> None:
+        self.prior_positions: list[np.ndarray] = []
+        self.posterior_positions: list[np.ndarray] = []
+
+    def measure(
+        self, packet: SynchronizedFrame, state: EstimatorState
+    ) -> LinearVisualMeasurement:
+        self.prior_positions.append(state.position.copy())
+        matrix = np.zeros((3, state.covariance.shape[0]))
+        matrix[:, :3] = np.eye(3)
+        return LinearVisualMeasurement(
+            residual=np.array([1.0, 0.0, 0.0]),
+            measurement_matrix=matrix,
+            measurement_covariance=np.eye(3) * 0.01,
+            status="accepted",
+        )
+
+    def on_state_updated(
+        self, packet: SynchronizedFrame, state: EstimatorState
+    ) -> None:
+        self.posterior_positions.append(state.position.copy())
+
+
 def _packets(tmp_path: Path) -> list[SynchronizedFrame]:
     return [
         SynchronizedFrame(
@@ -114,6 +138,18 @@ def test_runner_fuses_visual_measurements_and_exports_diagnostics(tmp_path: Path
     assert manifest["visual_provider"] == "synthetic_linear"
     assert manifest["visual_measurements"] == 2
     assert manifest["artifacts"]["visual_updates"] == "visual_updates.csv"
+
+
+
+def test_runner_notifies_visual_provider_after_posterior_update(tmp_path: Path) -> None:
+    provider = _VisualLifecycleProvider()
+    run_synchronized_frames(
+        _packets(tmp_path), tmp_path / "visual-lifecycle", visual_provider=provider
+    )
+
+    assert len(provider.prior_positions) == 2
+    assert len(provider.posterior_positions) == 2
+    assert np.linalg.norm(provider.posterior_positions[0] - provider.prior_positions[0]) > 0.1
 
 
 def test_runner_rejects_stream_without_imu(tmp_path: Path) -> None:
