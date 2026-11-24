@@ -60,3 +60,15 @@ def test_runtime_reuses_image_with_installed_dependencies() -> None:
     assert "apt-get install" not in runtime
     assert 'ldd "$executable"' in runtime
     assert 'grep -q "not found"' in runtime
+
+
+def test_offline_replay_disables_only_compressed_visualization_plugins() -> None:
+    script = _runtime_command()
+    assert "for topic in trackhist loop_depth loop_depth_colored" in script
+    assert 'rosparam set "/ros1_serial_msckf/$topic/disable_pub_plugins"' in script
+    assert "image_transport/compressedDepth" in script
+    assert "image_transport/compressed," in script
+    assert "image_transport/theora" in script
+    assert "image_transport/raw" not in script
+    assert "__name:=ros1_serial_msckf" in script
+    assert script.index("disable_pub_plugins") < script.index("rosrun ov_msckf")
