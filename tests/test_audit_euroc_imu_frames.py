@@ -77,3 +77,5 @@ def test_gyro_audit_recovers_constant_bias_and_orientation_direction() -> None:
     assert report["estimated_constant_gyro_bias_radps"] == pytest.approx(bias, abs=1e-10)
     assert report["direct_body_rate_rmse_after_constant_bias_removal_radps"] < 1e-10
     assert report["reversed_orientation_rate_rmse_radps"] > report["direct_body_rate_rmse_radps"]
+    assert len(report["segments_10s"]) == 1
+    assert report["segments_10s"][0]["samples"] == 100
