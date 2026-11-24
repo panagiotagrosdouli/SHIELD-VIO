@@ -7,10 +7,10 @@ from shield_vio.datasets.splits import load_paper_split
 from shield_vio.evaluation.prediction_targets import FailureEventIndex
 from shield_vio.experiments.frozen_predictor import FrozenPredictor
 from shield_vio.experiments.held_out_evaluation import evaluate_held_out
-from test_development_seal import bundle  # noqa: F401
+from test_development_seal import bundle  # noqa: F401, F811
 
 
-def _evaluate(bundle, sequence="test_seq", split="test", failure=True):
+def _evaluate(bundle, sequence="test_seq", split="test", failure=True):  # noqa: F811
     root, config, digest = bundle
     predictor = FrozenPredictor(root, config, digest)
     timestamps = np.arange(8, dtype=np.int64) * 1_000_000_000
@@ -35,7 +35,7 @@ def _evaluate(bundle, sequence="test_seq", split="test", failure=True):
     )
 
 
-def test_held_out_metrics(bundle):
+def test_held_out_metrics(bundle):  # noqa: F811
     metrics, predictions = _evaluate(bundle)
     assert metrics["confirmatory"] is False
     assert metrics["eligible_rows"] == 5
@@ -47,7 +47,7 @@ def test_held_out_metrics(bundle):
     assert not predictions["eligible"][-1]
 
 
-def test_single_class_metrics_are_undefined(bundle):
+def test_single_class_metrics_are_undefined(bundle):  # noqa: F811
     metrics, _ = _evaluate(bundle, failure=False)
     assert not metrics["discrimination_defined"]
     assert metrics["raw"]["auroc"] is None
@@ -56,11 +56,11 @@ def test_single_class_metrics_are_undefined(bundle):
     assert metrics["median_lead_time_seconds"] is None
 
 
-def test_development_partition_rejected(bundle):
+def test_development_partition_rejected(bundle):  # noqa: F811
     with pytest.raises(ValueError, match="requires test"):
         _evaluate(bundle, sequence="train_seq", split="train")
 
 
-def test_mislabeled_partition_rejected(bundle):
+def test_mislabeled_partition_rejected(bundle):  # noqa: F811
     with pytest.raises(ValueError, match="inherits physical-sequence split"):
         _evaluate(bundle, sequence="train_seq")
