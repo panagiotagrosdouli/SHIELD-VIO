@@ -11,6 +11,8 @@ on:
       - 'scripts/audit_real_euroc_accuracy.py'
       - 'scripts/audit_euroc_orientation.py'
       - 'scripts/audit_euroc_imu_frames.py'
+      - 'scripts/oracle_attitude_initialization_diagnostic.py'
+      - 'tests/test_oracle_attitude_initialization_diagnostic.py'
       - 'tests/test_audit_euroc_imu_frames.py'
       - 'tests/test_audit_euroc_orientation.py'
       - 'scripts/convert_euroc_rosbag.py'
@@ -34,6 +36,8 @@ on:
       - 'scripts/audit_real_euroc_accuracy.py'
       - 'scripts/audit_euroc_orientation.py'
       - 'scripts/audit_euroc_imu_frames.py'
+      - 'scripts/oracle_attitude_initialization_diagnostic.py'
+      - 'tests/test_oracle_attitude_initialization_diagnostic.py'
       - 'tests/test_audit_euroc_imu_frames.py'
       - 'tests/test_audit_euroc_orientation.py'
       - 'scripts/validate_public_smoke.py'
@@ -206,6 +210,13 @@ jobs:
         run: |
           python scripts/run_euroc.py data/euroc/MH_01_easy \
             --output results/real_euroc/MH_01_easy/imu_only
+
+      - name: Compare identity and oracle attitude initialization (diagnostic only)
+        run: |
+          python scripts/oracle_attitude_initialization_diagnostic.py \
+            --sequence-root data/euroc/MH_01_easy \
+            --output results/real_euroc/MH_01_easy/oracle_attitude_initialization.json
+          cat results/real_euroc/MH_01_easy/oracle_attitude_initialization.json
 
       - name: Run real OpenCV rotation configuration
         run: |
