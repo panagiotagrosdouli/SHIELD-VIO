@@ -55,7 +55,7 @@ The paired workflow reran both ESKF configurations, independent `evo` evaluation
 - EuRoC `MH_01_easy` ground-truth path length: **80.63 m**.
 - IMU-only ESKF: ATE RMSE **69,371.62 m**, ratio **860.41×** path length; translational RPE **71.68 m**.
 - ESKF plus monocular relative-rotation updates: ATE RMSE **76,633.96 m**, ratio **950.48×**; translational RPE **80.26 m**.
-- Both receive a coarse catastrophic-drift warning. This is a diagnostic only, not a scientific pass/fail threshold.
+- Both receive a coarse catastrophic-drift warning. This is a diagnostic only, not a scientific pass/fail threshold. The available ground truth starts 1.075 s after the estimator stream; over the first 4.0 s after GT coverage begins, the IMU-only estimate travels 200.5 m while GT travels 0.319 m, and estimated speed reaches 83.1 m/s. This documents rapid divergence, but does not identify its cause.
 - Smoke gate: 10 eligible windows, 10 positive, 0 negative. The gate passes pipeline integrity but discrimination remains undefined; evidence is `PUBLIC_DATASET_SMOKE`, `confirmatory: false`.
 
 **Disposition:** retain the severe drift as a RED estimator-accuracy finding. Do not tune on held-out sequences; diagnose frame, unit, initialization, and propagation conventions on predeclared training data before scaling the benchmark.
