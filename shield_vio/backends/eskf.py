@@ -17,7 +17,13 @@ class ESKFBackend:
         self,
         noise: IMUNoiseModel | None = None,
         gravity: np.ndarray | None = None,
+        initial_gyro_bias_std_rps: float | None = None,
     ) -> None:
+        if initial_gyro_bias_std_rps is not None and (
+            not np.isfinite(initial_gyro_bias_std_rps) or initial_gyro_bias_std_rps <= 0
+        ):
+            raise ValueError("initial_gyro_bias_std_rps must be finite and positive")
+        self.initial_gyro_bias_std_rps = initial_gyro_bias_std_rps
         self._filter = ErrorStateEKF(noise=noise, gravity=gravity)
         self._state = VIOState()
         self._timestamp_ns: int | None = None
@@ -31,6 +37,9 @@ class ESKFBackend:
         if timestamp_ns < 0:
             raise ValueError("timestamp_ns must be non-negative")
         self._state = VIOState()
+        if self.initial_gyro_bias_std_rps is not None:
+            variance = self.initial_gyro_bias_std_rps**2
+            self._state.covariance[12:15, 12:15] = np.eye(3) * variance
         self._timestamp_ns = int(timestamp_ns)
         self._propagated_imu_samples = 0
         self._filter.last_innovation = None
