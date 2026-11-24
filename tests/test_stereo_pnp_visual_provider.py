@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import numpy as np
-from PIL import Image
 from types import SimpleNamespace
+
+import numpy as np
+import pytest
+from PIL import Image
 
 from shield_vio.backends.base import EstimatorState
 from shield_vio.experiments.stereo_pnp_visual_provider import (
@@ -143,8 +145,6 @@ def test_cam1_image_association_rejects_large_timestamp_gap(tmp_path) -> None:
             timestamp_ns=1_000_000_000,
         )
     )
-
-    import pytest
 
     with pytest.raises(ValueError, match="nearest cam1 image differs"):
         _load_matching_cam1_image(packet)
