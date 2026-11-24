@@ -1,6 +1,8 @@
 """Metric stereo-PnP visual measurements for the EuRoC ESKF runner."""
 from __future__ import annotations
 
+import csv
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
@@ -163,6 +165,23 @@ def _quaternion_to_rotation(quaternion_wxyz: np.ndarray) -> np.ndarray:
     )
 
 
+@lru_cache(maxsize=16)
+def _cam1_index(data_csv: str) -> tuple[np.ndarray, tuple[str, ...]]:
+    timestamps: list[int] = []
+    filenames: list[str] = []
+    with Path(data_csv).open("r", encoding="utf-8", newline="") as stream:
+        for row in csv.reader(stream):
+            if not row or row[0].strip().startswith("#"):
+                continue
+            if len(row) < 2:
+                raise ValueError(f"malformed cam1 data row in {data_csv}")
+            timestamps.append(int(row[0]))
+            filenames.append(row[1].strip())
+    if not timestamps or any(b <= a for a, b in zip(timestamps, timestamps[1:])):
+        raise ValueError(f"cam1 timestamps must be non-empty and strictly increasing: {data_csv}")
+    return np.asarray(timestamps, dtype=np.int64), tuple(filenames)
+
+
 def _load_matching_cam1_image(packet: SynchronizedFrame) -> np.ndarray:
     left_path = Path(packet.frame.image_path)
     parts = list(left_path.parts)
@@ -171,7 +190,19 @@ def _load_matching_cam1_image(packet: SynchronizedFrame) -> np.ndarray:
     except ValueError as exc:
         raise ValueError("cam0 image path is required to derive cam1 path") from exc
     parts[index] = "cam1"
-    right_path = Path(*parts)
+    right_data_dir = Path(*parts).parent
+    data_csv = right_data_dir.parent / "data.csv"
+    timestamps, filenames = _cam1_index(str(data_csv))
+    left_timestamp = int(packet.frame.timestamp_ns)
+    insertion = int(np.searchsorted(timestamps, left_timestamp))
+    candidates = [index for index in (insertion - 1, insertion) if 0 <= index < len(timestamps)]
+    nearest = min(candidates, key=lambda index: abs(int(timestamps[index]) - left_timestamp))
+    delta_ns = abs(int(timestamps[nearest]) - left_timestamp)
+    if delta_ns > 10_000_000:
+        raise ValueError(
+            f"nearest cam1 image differs from cam0 timestamp by {delta_ns / 1e6:.3f} ms"
+        )
+    right_path = right_data_dir / filenames[nearest]
     image = cv2.imread(str(right_path), cv2.IMREAD_GRAYSCALE)
     if image is None:
         raise FileNotFoundError(right_path)

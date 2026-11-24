@@ -23,6 +23,7 @@ from PIL import Image
 
 
 CAM0_TOPIC = "/cam0/image_raw"
+CAM1_TOPIC = "/cam1/image_raw"
 IMU0_TOPIC = "/imu0"
 SUPPORTED_MONO_ENCODINGS = {"mono8", "8uc1", "8UC1"}
 SUPPORTED_RGB_ENCODINGS = {"rgb8", "bgr8"}
@@ -32,6 +33,7 @@ SUPPORTED_RGB_ENCODINGS = {"rgb8", "bgr8"}
 class ConversionSummary:
     sequence: str
     camera_frames: int
+    camera1_frames: int
     imu_samples: int
     ground_truth_samples: int
     first_camera_timestamp_ns: int
@@ -39,6 +41,7 @@ class ConversionSummary:
     first_imu_timestamp_ns: int
     last_imu_timestamp_ns: int
     image_pixel_sha256: str
+    image_pixel_sha256_cam1: str | None
 
 
 def _sha256(path: Path) -> str:
@@ -99,27 +102,41 @@ def _matrix_payload(matrix: Any) -> dict[str, Any]:
     return {"rows": 4, "cols": 4, "data": values.reshape(-1).tolist()}
 
 
+def _camera_calibration_payload(camera: dict[str, Any], camera_name: str) -> dict[str, Any]:
+    return {
+        "sensor_type": "camera",
+        "comment": f"EuRoC {camera_name} calibration translated from pinned OpenVINS config",
+        "T_BS": _matrix_payload(camera["T_imu_cam"]),
+        "rate_hz": 20.0,
+        "resolution": [int(value) for value in camera["resolution"]],
+        "camera_model": str(camera["camera_model"]),
+        "intrinsics": [float(value) for value in camera["intrinsics"]],
+        "distortion_model": str(camera["distortion_model"]),
+        "distortion_coefficients": [float(value) for value in camera["distortion_coeffs"]],
+    }
+
+
+def build_asl_camera_calibration(imucam_path: Path, camera_name: str) -> dict[str, Any]:
+    """Translate one OpenVINS camera mapping into the ASL calibration schema."""
+    imucam = _yaml_mapping(imucam_path)
+    camera = imucam.get(camera_name)
+    if not isinstance(camera, dict):
+        raise ValueError(f"OpenVINS calibration must contain a {camera_name} mapping")
+    payload = _camera_calibration_payload(camera, camera_name)
+    if payload["resolution"] != [752, 480]:
+        raise ValueError(f"unexpected EuRoC {camera_name} resolution")
+    return payload
+
+
 def build_asl_calibrations(imucam_path: Path, imu_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     """Translate pinned OpenVINS EuRoC calibration YAML into SHIELD-VIO's ASL parser schema."""
 
-    imucam = _yaml_mapping(imucam_path)
+    camera = build_asl_camera_calibration(imucam_path, "cam0")
     imu = _yaml_mapping(imu_path)
-    cam0 = imucam.get("cam0")
     imu0 = imu.get("imu0")
-    if not isinstance(cam0, dict) or not isinstance(imu0, dict):
-        raise ValueError("OpenVINS calibration must contain cam0 and imu0 mappings")
+    if not isinstance(imu0, dict):
+        raise ValueError("OpenVINS calibration must contain an imu0 mapping")
 
-    camera = {
-        "sensor_type": "camera",
-        "comment": "EuRoC cam0 calibration translated from pinned OpenVINS config",
-        "T_BS": _matrix_payload(cam0["T_imu_cam"]),
-        "rate_hz": 20.0,
-        "resolution": [int(value) for value in cam0["resolution"]],
-        "camera_model": str(cam0["camera_model"]),
-        "intrinsics": [float(value) for value in cam0["intrinsics"]],
-        "distortion_model": str(cam0["distortion_model"]),
-        "distortion_coefficients": [float(value) for value in cam0["distortion_coeffs"]],
-    }
     inertial = {
         "sensor_type": "imu",
         "comment": "EuRoC imu0 calibration translated from pinned OpenVINS config",
@@ -130,8 +147,6 @@ def build_asl_calibrations(imucam_path: Path, imu_path: Path) -> tuple[dict[str,
         "accelerometer_noise_density": float(imu0["accelerometer_noise_density"]),
         "accelerometer_random_walk": float(imu0["accelerometer_random_walk"]),
     }
-    if camera["resolution"] != [752, 480]:
-        raise ValueError("unexpected EuRoC cam0 resolution")
     return camera, inertial
 
 
@@ -249,7 +264,7 @@ def convert_rosbag(
     openvins_revision: str,
     evidence_scope: str = "PUBLIC_DATASET_SMOKE_ACQUISITION",
 ) -> dict[str, Any]:
-    """Convert cam0 and imu0 from one EuRoC ROS1/ROS2 bag into a minimal ASL directory."""
+    """Convert EuRoC cam0, optional cam1, and imu0 into a minimal ASL directory."""
 
     if output_root.exists() and any(output_root.iterdir()):
         raise FileExistsError(f"refusing to overwrite non-empty output directory: {output_root}")
@@ -258,6 +273,13 @@ def convert_rosbag(
     bag_sha256 = _verify_sha256(bag_path, expected_bag_sha256)
     camera_calibration, imu_calibration = build_asl_calibrations(
         openvins_imucam_calibration, openvins_imu_calibration
+    )
+    imucam_payload = _yaml_mapping(openvins_imucam_calibration)
+    camera1_source = imucam_payload.get("cam1")
+    camera1_calibration = (
+        _camera_calibration_payload(camera1_source, "cam1")
+        if isinstance(camera1_source, dict)
+        else None
     )
     _write_yaml(output_root / "mav0/cam0/sensor.yaml", camera_calibration)
     _write_yaml(output_root / "mav0/imu0/sensor.yaml", imu_calibration)
@@ -273,34 +295,50 @@ def convert_rosbag(
             "rosbags is required for EuRoC bag conversion; install shield-vio[dataset]"
         ) from exc
 
-    camera_dir = output_root / "mav0/cam0/data"
-    camera_dir.mkdir(parents=True, exist_ok=True)
-    camera_rows: list[list[object]] = []
+    camera_dirs = {
+        CAM0_TOPIC: output_root / "mav0/cam0/data",
+        CAM1_TOPIC: output_root / "mav0/cam1/data",
+    }
+    camera_rows: dict[str, list[list[object]]] = {CAM0_TOPIC: [], CAM1_TOPIC: []}
+    camera_timestamps: dict[str, list[int]] = {CAM0_TOPIC: [], CAM1_TOPIC: []}
+    pixel_digests = {CAM0_TOPIC: hashlib.sha256(), CAM1_TOPIC: hashlib.sha256()}
     imu_rows: list[list[object]] = []
-    camera_timestamps: list[int] = []
     imu_timestamps: list[int] = []
-    pixel_digest = hashlib.sha256()
+    camera_dirs[CAM0_TOPIC].mkdir(parents=True, exist_ok=True)
 
     with AnyReader([bag_path]) as reader:
         by_topic = {connection.topic: connection for connection in reader.connections}
         missing_topics = sorted({CAM0_TOPIC, IMU0_TOPIC} - set(by_topic))
         if missing_topics:
             raise ValueError(f"source bag is missing required topics: {', '.join(missing_topics)}")
-        connections = [by_topic[CAM0_TOPIC], by_topic[IMU0_TOPIC]]
+        camera1_present = CAM1_TOPIC in by_topic
+        if camera1_present and camera1_calibration is None:
+            raise ValueError("source bag contains cam1 images but calibration has no cam1 mapping")
+        if camera1_present:
+            camera_dirs[CAM1_TOPIC].mkdir(parents=True, exist_ok=True)
+            _write_yaml(output_root / "mav0/cam1/sensor.yaml", camera1_calibration)
+        topics = [CAM0_TOPIC, IMU0_TOPIC]
+        if camera1_present:
+            topics.append(CAM1_TOPIC)
+        connections = [by_topic[topic] for topic in topics]
         for connection, _bag_timestamp, rawdata in reader.messages(connections=connections):
             message = reader.deserialize(rawdata, connection.msgtype)
             timestamp_ns = _stamp_ns(message.header)
 
-            if connection.topic == CAM0_TOPIC:
-                if camera_timestamps and timestamp_ns <= camera_timestamps[-1]:
-                    raise ValueError("cam0 timestamps are not strictly increasing")
+            if connection.topic in camera_rows:
+                timestamps = camera_timestamps[connection.topic]
+                if timestamps and timestamp_ns <= timestamps[-1]:
+                    raise ValueError(f"{connection.topic} timestamps are not strictly increasing")
                 image = _image_array(message)
                 filename = f"{timestamp_ns}.png"
-                Image.fromarray(image).save(camera_dir / filename, format="PNG", compress_level=3)
-                camera_timestamps.append(timestamp_ns)
-                camera_rows.append([timestamp_ns, filename])
-                pixel_digest.update(timestamp_ns.to_bytes(8, "little", signed=False))
-                pixel_digest.update(image.tobytes(order="C"))
+                Image.fromarray(image).save(
+                    camera_dirs[connection.topic] / filename, format="PNG", compress_level=3
+                )
+                timestamps.append(timestamp_ns)
+                camera_rows[connection.topic].append([timestamp_ns, filename])
+                digest = pixel_digests[connection.topic]
+                digest.update(timestamp_ns.to_bytes(8, "little", signed=False))
+                digest.update(image.tobytes(order="C"))
                 continue
 
             if connection.topic == IMU0_TOPIC:
@@ -321,19 +359,27 @@ def convert_rosbag(
                 imu_timestamps.append(timestamp_ns)
                 imu_rows.append([timestamp_ns, *values])
 
-    _strictly_increasing(camera_timestamps, "cam0")
+    _strictly_increasing(camera_timestamps[CAM0_TOPIC], "cam0")
     _strictly_increasing(imu_timestamps, "imu0")
-    if len(camera_timestamps) < 100:
+    if len(camera_timestamps[CAM0_TOPIC]) < 100:
         raise ValueError("unexpectedly few camera frames in EuRoC bag")
+    if camera1_present:
+        _strictly_increasing(camera_timestamps[CAM1_TOPIC], "cam1")
+        if len(camera_timestamps[CAM1_TOPIC]) < 100:
+            raise ValueError("unexpectedly few cam1 frames in EuRoC bag")
     if len(imu_timestamps) < 1000:
         raise ValueError("unexpectedly few IMU samples in EuRoC bag")
 
-    with (output_root / "mav0/cam0/data.csv").open(
-        "w", encoding="utf-8", newline=""
-    ) as stream:
-        writer = csv.writer(stream)
-        writer.writerow(["#timestamp [ns]", "filename"])
-        writer.writerows(camera_rows)
+    for topic, folder in (
+        (CAM0_TOPIC, output_root / "mav0/cam0"),
+        (CAM1_TOPIC, output_root / "mav0/cam1"),
+    ):
+        if topic == CAM1_TOPIC and not camera1_present:
+            continue
+        with (folder / "data.csv").open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["#timestamp [ns]", "filename"])
+            writer.writerows(camera_rows[topic])
 
     with (output_root / "mav0/imu0/data.csv").open(
         "w", encoding="utf-8", newline=""
@@ -354,14 +400,18 @@ def convert_rosbag(
 
     summary = ConversionSummary(
         sequence=sequence,
-        camera_frames=len(camera_timestamps),
+        camera_frames=len(camera_timestamps[CAM0_TOPIC]),
+        camera1_frames=len(camera_timestamps[CAM1_TOPIC]),
         imu_samples=len(imu_timestamps),
         ground_truth_samples=gt_count,
-        first_camera_timestamp_ns=camera_timestamps[0],
-        last_camera_timestamp_ns=camera_timestamps[-1],
+        first_camera_timestamp_ns=camera_timestamps[CAM0_TOPIC][0],
+        last_camera_timestamp_ns=camera_timestamps[CAM0_TOPIC][-1],
         first_imu_timestamp_ns=imu_timestamps[0],
         last_imu_timestamp_ns=imu_timestamps[-1],
-        image_pixel_sha256=pixel_digest.hexdigest(),
+        image_pixel_sha256=pixel_digests[CAM0_TOPIC].hexdigest(),
+        image_pixel_sha256_cam1=(
+            pixel_digests[CAM1_TOPIC].hexdigest() if camera1_present else None
+        ),
     )
     tracked_outputs = [
         output_root / "mav0/cam0/data.csv",
@@ -370,6 +420,10 @@ def convert_rosbag(
         output_root / "mav0/imu0/sensor.yaml",
         output_root / "mav0/state_groundtruth_estimate0/data.csv",
     ]
+    if camera1_present:
+        tracked_outputs.extend(
+            [output_root / "mav0/cam1/data.csv", output_root / "mav0/cam1/sensor.yaml"]
+        )
     manifest = {
         "schema_version": "SHIELD_VIO_EUROC_PORTABLE_ACQUISITION_V1",
         "dataset": "EuRoC_MAV",
@@ -377,9 +431,9 @@ def convert_rosbag(
         "evidence_scope": evidence_scope,
         "confirmatory_identity": False,
         "claim_boundary": (
-            "Portable CI acquisition from a checksum-verified ROS bag mirror plus pinned OpenVINS "
-            "calibration/ground-truth exports. This does not establish identity with the current "
-            "ETH Research Collection archive for confirmatory evaluation."
+            "Portable CI acquisition from a ROS bag plus pinned OpenVINS calibration/ground-truth "
+            "exports. Source URL and SHA-256 are recorded; identity with the current ETH Research "
+            "Collection archive is not established for confirmatory evaluation."
         ),
         "source": {
             "bag_url": source_url,
@@ -390,7 +444,11 @@ def convert_rosbag(
             "openvins_ground_truth_sha256": _sha256(openvins_ground_truth),
             "openvins_imucam_calibration_sha256": _sha256(openvins_imucam_calibration),
             "openvins_imu_calibration_sha256": _sha256(openvins_imu_calibration),
-            "topics": {"camera": CAM0_TOPIC, "imu": IMU0_TOPIC},
+            "topics": {
+                "camera": CAM0_TOPIC,
+                "camera1": CAM1_TOPIC if camera1_present else None,
+                "imu": IMU0_TOPIC,
+            },
         },
         "conversion": {
             **summary.__dict__,

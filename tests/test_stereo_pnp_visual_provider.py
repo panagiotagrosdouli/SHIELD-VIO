@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
+import pytest
+from PIL import Image
 
 from shield_vio.backends.base import EstimatorState
-from shield_vio.experiments.stereo_pnp_visual_provider import build_metric_pose_measurement
+from shield_vio.experiments.stereo_pnp_visual_provider import (
+    _load_matching_cam1_image,
+    build_metric_pose_measurement,
+)
 from shield_vio.vision.stereo_pnp import MetricPnPResult
 
 
@@ -99,3 +106,45 @@ def test_camera_lever_arm_changes_body_translation() -> None:
         np.diag(measurement.measurement_covariance),
         [0.01, 0.01, 0.01, 0.0025, 0.0025, 0.0025],
     )
+
+
+def test_cam1_image_is_associated_by_nearest_recorded_timestamp(tmp_path) -> None:
+    left_data = tmp_path / "mav0" / "cam0" / "data"
+    right_data = tmp_path / "mav0" / "cam1" / "data"
+    left_data.mkdir(parents=True)
+    right_data.mkdir(parents=True)
+    right_path = right_data / "1000000005.png"
+    Image.fromarray(np.array([[11, 22], [33, 44]], dtype=np.uint8)).save(right_path)
+    (right_data.parent / "data.csv").write_text(
+        "#timestamp [ns],filename\n1000000005,1000000005.png\n",
+        encoding="utf-8",
+    )
+    packet = SimpleNamespace(
+        frame=SimpleNamespace(
+            image_path=left_data / "1000000000.png",
+            timestamp_ns=1_000_000_000,
+        )
+    )
+
+    image = _load_matching_cam1_image(packet)
+    np.testing.assert_array_equal(image, [[11, 22], [33, 44]])
+
+
+def test_cam1_image_association_rejects_large_timestamp_gap(tmp_path) -> None:
+    left_data = tmp_path / "mav0" / "cam0" / "data"
+    right_data = tmp_path / "mav0" / "cam1" / "data"
+    left_data.mkdir(parents=True)
+    right_data.mkdir(parents=True)
+    (right_data.parent / "data.csv").write_text(
+        "#timestamp [ns],filename\n2000000000,2000000000.png\n",
+        encoding="utf-8",
+    )
+    packet = SimpleNamespace(
+        frame=SimpleNamespace(
+            image_path=left_data / "1000000000.png",
+            timestamp_ns=1_000_000_000,
+        )
+    )
+
+    with pytest.raises(ValueError, match="nearest cam1 image differs"):
+        _load_matching_cam1_image(packet)

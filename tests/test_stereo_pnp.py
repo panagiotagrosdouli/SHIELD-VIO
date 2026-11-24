@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 import pytest
 
+from shield_vio.vision.stereo_geometry import StereoTriangulationResult
 from shield_vio.vision.stereo_pnp import MetricPnPResult, StereoLandmarks, StereoPnPFrontend
+import shield_vio.vision.stereo_pnp as stereo_pnp
 
 
 def _camera_matrix() -> np.ndarray:
@@ -77,6 +79,50 @@ def test_metric_pnp_recovers_known_motion(monkeypatch: pytest.MonkeyPatch) -> No
     np.testing.assert_allclose(result.translation_current_previous_m, current_transform[:3, 3], atol=1e-5)
     assert result.inlier_count == len(points)
     assert result.reprojection_rmse_px < 1e-5
+
+
+def test_build_landmarks_passes_camera_matrix_to_opencv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera = _camera_matrix()
+    frontend = StereoPnPFrontend(camera, camera, np.eye(3), np.array([-0.11, 0.0, 0.0]))
+    pixels = [(80.0 + 20.0 * i, 60.0 + 7.0 * (i % 4)) for i in range(8)]
+    keypoints = [cv2.KeyPoint(x, y, 8) for x, y in pixels]
+    descriptors = np.random.default_rng(12).integers(0, 256, (8, 32), dtype=np.uint8)
+
+    class _ORB:
+        def detectAndCompute(self, image: np.ndarray, mask: object) -> tuple[list[cv2.KeyPoint], np.ndarray]:
+            return keypoints, descriptors.copy()
+
+    monkeypatch.setattr(frontend, "_orb", _ORB())
+    original_undistort = cv2.undistortPoints
+    camera_matrices: list[np.ndarray] = []
+
+    def _checked_undistort(points, camera_matrix, distortion, **kwargs):
+        camera_matrices.append(np.asarray(camera_matrix))
+        return original_undistort(points, camera_matrix, distortion, **kwargs)
+
+    monkeypatch.setattr(cv2, "undistortPoints", _checked_undistort)
+
+    def _triangulate(left, right, *args, **kwargs):
+        count = len(left)
+        return StereoTriangulationResult(
+            np.tile([0.0, 0.0, 2.0], (count, 1)),
+            np.ones(count, dtype=bool),
+            np.zeros(count),
+            np.zeros(count),
+        )
+
+    monkeypatch.setattr(stereo_pnp, "triangulate_stereo_points", _triangulate)
+    image = np.zeros((240, 320), dtype=np.uint8)
+
+    landmarks = frontend.build_landmarks(image, image)
+
+    assert landmarks.stereo_match_count == len(keypoints)
+    assert len(camera_matrices) == 2
+    for matrix in camera_matrices:
+        np.testing.assert_allclose(matrix, camera)
+
 
 
 def test_pnp_returns_none_with_insufficient_matches(monkeypatch: pytest.MonkeyPatch) -> None:
