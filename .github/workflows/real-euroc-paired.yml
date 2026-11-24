@@ -299,7 +299,7 @@ jobs:
               ),
           }
           Path("results/real_euroc/MH_01_easy/stereo_pnp/stereo_status.json").write_text(
-              json.dumps(status, indent=2, sort_keys=True) + "\\n",
+              json.dumps(status, indent=2, sort_keys=True) + "\n",
               encoding="utf-8",
           )
           print(json.dumps(status, indent=2, sort_keys=True))
