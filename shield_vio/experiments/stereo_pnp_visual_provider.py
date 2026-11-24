@@ -101,7 +101,6 @@ class StereoPnPVisualProvider:
             status="stereo_pnp_pose_update",
         )
 
-
     def on_state_updated(
         self, _packet: SynchronizedFrame, state: EstimatorState
     ) -> None:
