@@ -95,6 +95,9 @@ The paired workflow reran both ESKF configurations, independent `evo` evaluation
 
 A workstream moves to **GREEN** only when implementation, tests or experimental artifacts, provenance, and its stated acceptance criteria agree. A successful CI run does not verify real-dataset performance, OpenVINS runtime behavior, cross-dataset generalization, safety benefit, or publication claims. No benchmark value, citation, significance result, or formal safety claim may be inferred from this tracker.
 
+## Stationary IMU directional-dispersion candidate (2026-11-24)
+
+**YELLOW — implementation committed, validation pending.** Base main `f99bdcc` passed [CI 45389976449](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45389976449). Candidate `6d77df0` replaces the standard deviation of acceleration magnitudes with RMS vector dispersion about the mean and rejects near-zero mean acceleration. Regression commit `8b5d110` tests constant-magnitude changing-direction acceleration. The existing threshold is retained numerically but its interpretation is stricter; this is a candidate estimator behavior change, not a modification of the frozen evaluation protocol. Acceptance: existing and new gravity tests and full CI pass, then evaluate only on predeclared development data before sealing a new estimator version. No claim of corrected EuRoC accuracy; the prior RED finding remains. Local git clone failed because github.com could not be resolved in the execution container; remote CI is needed for integrated validation.
 
 ## Live GitHub verification — 2026-11-24
 

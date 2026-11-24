@@ -48,3 +48,17 @@ def test_gravity_alignment_requires_real_stationary_window() -> None:
     backend.initialize(0)
     with pytest.raises(ValueError, match=">=10"):
         backend.initialize_from_stationary_imu(np.zeros((3, 3)), np.zeros((3, 3)))
+
+
+def test_gravity_alignment_rejects_directional_variation_at_constant_norm() -> None:
+    backend = ESKFBackend()
+    backend.initialize(0)
+    # Constant magnitude hides a changing direction from a norm-only test.
+    angle = 0.2
+    acceleration = 9.81 * np.tile(
+        [[np.sin(angle), 0.0, np.cos(angle)], [-np.sin(angle), 0.0, np.cos(angle)]],
+        (25, 1),
+    )
+    np.testing.assert_allclose(np.linalg.norm(acceleration, axis=1), 9.81)
+    with pytest.raises(ValueError, match="not sufficiently stationary"):
+        backend.initialize_from_stationary_imu(acceleration, np.zeros_like(acceleration))

@@ -63,12 +63,14 @@ class ESKFBackend:
         mean_accel = np.mean(accel, axis=0)
         norm = float(np.linalg.norm(mean_accel))
         gravity_norm = float(np.linalg.norm(self._filter.gravity))
-        norm_std = float(np.std(np.linalg.norm(accel, axis=1)))
+        # Vector dispersion detects changing direction even at constant magnitude.
+        accel_dispersion = float(np.sqrt(np.mean(np.sum((accel - mean_accel) ** 2, axis=1))))
         gyro_median = float(np.median(np.linalg.norm(gyro, axis=1)))
         if (
             gravity_norm <= 0
             or abs(norm - gravity_norm) > accel_tolerance_mps2
-            or norm_std > accel_std_max_mps2
+            or norm <= np.finfo(float).eps
+            or accel_dispersion > accel_std_max_mps2
             or gyro_median > gyro_threshold_rps
         ):
             raise ValueError(
