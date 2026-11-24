@@ -68,11 +68,9 @@ class StereoPnPVisualProvider:
             raise ValueError("right image loader must return a non-empty grayscale image")
 
         current_landmarks = self.frontend.build_landmarks(left, right)
-        current_world_body = _state_world_body(state)
         previous_landmarks = self._previous_landmarks
         previous_world_body = self._previous_world_body
         self._previous_landmarks = current_landmarks
-        self._previous_world_body = current_world_body
         if previous_landmarks is None or previous_world_body is None:
             return None
 
@@ -102,6 +100,13 @@ class StereoPnPVisualProvider:
             inlier_count=motion.inlier_count,
             status="stereo_pnp_pose_update",
         )
+
+
+    def on_state_updated(
+        self, _packet: SynchronizedFrame, state: EstimatorState
+    ) -> None:
+        """Cache the posterior body pose after this frame's visual update."""
+        self._previous_world_body = _state_world_body(state)
 
 
 def _rotation_residual_jacobian(
