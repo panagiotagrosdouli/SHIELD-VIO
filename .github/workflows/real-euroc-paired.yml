@@ -347,10 +347,10 @@ jobs:
 
       - name: Audit position-aligned attitude error
         run: |
-          python scripts/audit_euroc_orientation.py \\
-            --groundtruth data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv \\
-            --baseline-trajectory results/real_euroc/MH_01_easy/imu_only/trajectory.csv \\
-            --visual-trajectory results/real_euroc/MH_01_easy/opencv_rotation/trajectory.csv \\
+          python scripts/audit_euroc_orientation.py \
+            --groundtruth data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv \
+            --baseline-trajectory results/real_euroc/MH_01_easy/imu_only/trajectory.csv \
+            --visual-trajectory results/real_euroc/MH_01_easy/opencv_rotation/trajectory.csv \
             --output results/real_euroc/MH_01_easy/attitude_alignment_diagnostic.json
           cat results/real_euroc/MH_01_easy/attitude_alignment_diagnostic.json
 
