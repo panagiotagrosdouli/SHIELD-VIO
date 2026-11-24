@@ -104,3 +104,21 @@ After this gate passes:
 6. execute real train/calibration/validation/test partitions;
 7. generate run-level metric tables compatible with the paired aggregation contract;
 8. only then populate confirmatory manuscript tables.
+
+
+## Real-data trajectory accuracy audit
+
+The real EuRoC workflow writes `accuracy_audit.json` alongside paired
+metrics. It reports each estimator's ATE RMSE relative to the full
+ground-truth path length and emits a diagnostic flag when ATE is at least that
+distance.
+
+- The ratio is a coarse catastrophic-drift warning, not a standard benchmark
+  pass/fail threshold.
+- `accuracy_validated=false` is always emitted; absence of the warning does
+  not establish accurate VIO.
+- Nonfinite or negative errors, invalid sample counts, and zero-motion ground
+  truth fail the audit.
+
+The benchmark workflow can pass as an execution pipeline while its estimator
+has unusable accuracy. Report trajectory errors and limitations directly.
