@@ -1,7 +1,7 @@
 # SHIELD-VIO Master Progress
 
 **Snapshot:** 2026-11-24 (UTC)  
-**Audited base:** `main` at `44b53f8e852a6541166a2188d0022a561661220b`  
+**Audited base:** `main` includes headless OpenVINS merge `0946e06944a771705bdeb595243eb0402b1afa3c`  
 **Purpose:** Track implementation and evidence without treating planned work, unit tests, synthetic runs, or an in-progress workflow as real benchmark validation.
 
 ## Status key
@@ -18,7 +18,7 @@
 | Main CI for `44b53f8` | **GREEN:** GitHub Actions run [45382962876](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382962876) completed successfully. |
 | Real EuRoC paired benchmark for `7559dd5` | **YELLOW:** run [45380153306](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45380153306) completed and uploaded artifact `shield-vio-real-euroc-mh01-paired` (artifact ID `14912809427`; SHA-256 `9772d64f57e9973fa47d93b8725059693b2df025aa65dcb9b0651fc243677179`). The pipeline passed, but the estimator result is unusable and smoke prediction is single-class; see findings below. |
 | PR #105 | **Integrated:** merged to `main` at `7559dd5`; its CI run [45380153039](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45380153039) passed. It adds canonical held-out probability evaluation and explicitly limits the result to non-confirmatory probability metrics. |
-| PR #104 | **Runtime verified:** draft `fix/openvins-headless-transport`, head `a36d59e`; PR CI and pinned OpenVINS `MH_01_easy` replay pass in run [45382473608](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473608). The headless source patch omits unused visualization publishers. Artifact `14915278229` (SHA-256 `366b13ee50c001bbda6999eaba9668e9a41ef94e6cbd67c06554e4978c7330cb`) records the patch digest, successful 138 s replay and 0.09214 m ATE RMSE. This is one non-confirmatory sequence smoke; primary failure labels have 0 events and 0 positive windows at all tested horizons, so detector discrimination is undefined. |
+| PR #104 | **Integrated:** squash-merged as `0946e069`; CI [45382473614](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473614) and pinned OpenVINS `MH_01_easy` replay [45382473608](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473608) passed. Artifact `14915278229` (SHA-256 `366b13ee50c001bbda6999eaba9668e9a41ef94e6cbd67c06554e4978c7330cb`) records the headless patch digest, 138 s replay and 0.09214 m ATE RMSE. This is one non-confirmatory sequence smoke; primary failure labels have 0 events and 0 positive windows at all tested horizons, so detector discrimination is undefined. |
 | Existing artifacts | `docs/publication/evidence/euroc_mh01_smoke_v1.json`; inspect its provenance and scope before using it as evidence. |
 | Repository shape | Existing Python estimator, experiment, evaluation, dataset, and test packages; no ROS 2 package, Dockerfile, or complete manuscript source was present in the audited main tree. |
 
@@ -39,7 +39,7 @@ The `mh01-paired` job completed successfully, including checksum-verified downlo
 
 | Workstream | Status | Current implementation / evidence | Remaining acceptance criteria |
 |---|---|---|---|
-| Repository, PR, and CI audit | YELLOW | Main CI passes; PR #105 and PR #107 merged. PR #104 headless patch and runtime are verified; PR #100 and #96 remain open and need disposition review. | Review remaining open PRs and relevant issues, branch history, workflow logs and experiment artifacts; resolve remaining integration work; keep this record current. |
+| Repository, PR, and CI audit | YELLOW | PR #104, #105 and #107 merged; PR #100 and #96 remain open and need disposition review. Main CI passed at the prior main snapshot. | Review remaining open PRs and relevant issues, branch history, workflow logs and experiment artifacts; resolve remaining integration work; keep this record current. |
 | CI/CD and regression suite | YELLOW | Latest main CI passes; CI failures existed on earlier commits and were addressed before the current base. | Run full required checks on the final candidate, inspect failures instead of suppressing them, and confirm all required workflows pass on the release commit. |
 | VIO estimation backend | YELLOW | Research implementations exist for feature tracking, IMU preintegration, a 15-state ESKF, calibration/stereo geometry, trajectory output, and loop closure, with numerical/unit tests. README correctly calls these research prototypes. | Independently validate coordinate/quaternion conventions, Jacobians and covariance consistency; exercise complete calibrated camera–IMU synchronization, initialization/recovery, stereo and monocular pipelines; document limitations with measured evidence. |
 | EuRoC benchmark | YELLOW | One checksum-verified mirrored `MH_01_easy` run completed on real sensor/GT data with CI and uploaded artifacts. This source receipt explicitly says it does not establish identity with the current ETH archive and is non-confirmatory. | Diagnose the catastrophic trajectory drift before scaling; verify official-source identity and frozen split; execute all 11 registered sequences; inspect per-sequence trajectories, diagnostics, failures and runtime; publish reproducible metrics/artifacts and grouped uncertainty. |
