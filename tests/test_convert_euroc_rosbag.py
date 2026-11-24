@@ -12,6 +12,7 @@ from scripts.convert_euroc_rosbag import (
     _stamp_ns,
     _verify_sha256,
     build_asl_calibrations,
+    build_asl_camera_calibration,
     convert_openvins_ground_truth,
 )
 
@@ -110,3 +111,37 @@ def test_verify_sha256_rejects_wrong_source(tmp_path: Path) -> None:
     assert _verify_sha256(path, correct) == correct
     with pytest.raises(ValueError, match="source bag SHA-256 mismatch"):
         _verify_sha256(path, "0" * 64)
+
+
+def test_build_asl_camera_calibration_for_cam1(tmp_path: Path) -> None:
+    imucam = tmp_path / "imucam.yaml"
+    imucam.write_text(
+        """%YAML:1.0
+cam1:
+  T_imu_cam:
+    - [0.0, -1.0, 0.0, -0.02]
+    - [1.0, 0.0, 0.0, 0.04]
+    - [0.0, 0.0, 1.0, 0.01]
+    - [0.0, 0.0, 0.0, 1.0]
+  camera_model: pinhole
+  distortion_coeffs: [-0.28, 0.07, 0.0, 0.0]
+  distortion_model: radtan
+  intrinsics: [457.587, 456.134, 379.999, 255.238]
+  resolution: [752, 480]
+""",
+        encoding="utf-8",
+    )
+
+    camera = build_asl_camera_calibration(imucam, "cam1")
+    assert camera["sensor_type"] == "camera"
+    assert camera["resolution"] == [752, 480]
+    assert camera["T_BS"]["data"][3] == pytest.approx(-0.02)
+    assert camera["intrinsics"] == pytest.approx([457.587, 456.134, 379.999, 255.238])
+
+
+def test_build_asl_camera_calibration_rejects_missing_camera(tmp_path: Path) -> None:
+    imucam = tmp_path / "imucam.yaml"
+    imucam.write_text("cam0: {}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="cam1 mapping"):
+        build_asl_camera_calibration(imucam, "cam1")
