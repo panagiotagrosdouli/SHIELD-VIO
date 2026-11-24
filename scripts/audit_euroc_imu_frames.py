@@ -58,6 +58,30 @@ def _read_numeric_csv(path: Path) -> np.ndarray:
     return values
 
 
+def estimate_acceleration_from_position(
+    timestamps_s: np.ndarray, positions_m: np.ndarray, *, window_samples: int = 21
+) -> np.ndarray:
+    """Estimate acceleration with local quadratic fits to reduce second-difference noise."""
+    timestamps = np.asarray(timestamps_s, dtype=float)
+    positions = np.asarray(positions_m, dtype=float)
+    if timestamps.ndim != 1 or positions.shape != (len(timestamps), 3):
+        raise ValueError("timestamps and positions must have shapes (N,) and (N,3)")
+    if window_samples < 5 or window_samples % 2 != 1 or window_samples > len(timestamps):
+        raise ValueError("window_samples must be odd, >=5, and no larger than the trajectory")
+    if np.any(np.diff(timestamps) <= 0) or not np.all(np.isfinite(positions)):
+        raise ValueError("timestamps must increase and positions must be finite")
+    half = window_samples // 2
+    result = np.empty_like(positions)
+    for index in range(len(timestamps)):
+        start = max(0, min(index - half, len(timestamps) - window_samples))
+        selected = np.arange(start, start + window_samples)
+        dt = timestamps[selected] - timestamps[index]
+        design = np.column_stack([np.ones(window_samples), dt, dt * dt])
+        coefficients, *_ = np.linalg.lstsq(design, positions[selected], rcond=None)
+        result[index] = 2.0 * coefficients[2]
+    return result
+
+
 def audit_imu_frames(
     imu: np.ndarray,
     groundtruth: np.ndarray,
@@ -67,8 +91,8 @@ def audit_imu_frames(
     """Compare IMU-derived acceleration to GT velocity derivatives under conventions."""
     imu = np.asarray(imu, dtype=float)
     gt = np.asarray(groundtruth, dtype=float)
-    if imu.ndim != 2 or imu.shape[1] < 7 or gt.ndim != 2 or gt.shape[1] < 11:
-        raise ValueError("EuRoC IMU needs 7 columns and state ground truth needs at least 11")
+    if imu.ndim != 2 or imu.shape[1] < 7 or gt.ndim != 2 or gt.shape[1] < 8:
+        raise ValueError("EuRoC IMU needs 7 columns and state ground truth needs at least 8")
     if not np.all(np.isfinite(imu)) or not np.all(np.isfinite(gt)):
         raise ValueError("inputs must be finite")
     ti = imu[:, 0] * 1e-9
@@ -92,9 +116,18 @@ def audit_imu_frames(
     paired_t = ti[valid]
     q = paired_gt[:, 4:8]
     accel = paired_imu[:, 4:7]
-    # EuRoC state layout: timestamp, p, q(wxyz), v, gyro bias, accel bias.
-    velocity = gt[:, 8:11]
-    gt_accel_all = np.gradient(velocity, tg, axis=0, edge_order=2 if len(tg) >= 3 else 1)
+    # Full ASL state rows include velocity; the portable OpenVINS smoke export
+    # contains pose only, so estimate acceleration from smoothed position there.
+    if gt.shape[1] >= 11:
+        gt_accel_all = np.gradient(gt[:, 8:11], tg, axis=0, edge_order=2)
+        reference_acceleration_source = "groundtruth_velocity_derivative"
+        smoothing_window_samples = None
+    else:
+        smoothing_window_samples = min(21, len(gt) if len(gt) % 2 else len(gt) - 1)
+        gt_accel_all = estimate_acceleration_from_position(
+            tg, gt[:, 1:4], window_samples=smoothing_window_samples
+        )
+        reference_acceleration_source = "smoothed_groundtruth_position_second_derivative"
     gt_accel = gt_accel_all[indices[valid]]
     accel_bias = paired_gt[:, 14:17] if gt.shape[1] >= 17 else np.zeros_like(accel)
 
@@ -128,6 +161,8 @@ def audit_imu_frames(
         "associated_samples": int(valid.sum()),
         "association_max_gap_s": max_gap_s,
         "associated_duration_s": float(paired_t[-1] - paired_t[0]),
+        "reference_acceleration_source": reference_acceleration_source,
+        "smoothing_window_samples": smoothing_window_samples,
         "median_raw_accel_norm_mps2": float(np.median(accel_norm)),
         "median_raw_gyro_norm_radps": float(np.median(np.linalg.norm(gyro, axis=1))),
         "initial_gt_body_down_tilt_from_identity_deg": initial_tilt_deg,
