@@ -1,7 +1,7 @@
 # SHIELD-VIO Master Progress
 
 **Snapshot:** 2026-11-24 (UTC)  
-**Audited base:** `main` includes headless OpenVINS merge `0946e06944a771705bdeb595243eb0402b1afa3c`  
+**Audited base:** `main` includes EuRoC drift-audit merge `d1e13061904c33fa1b46f915b9703a6ee72ff5b1`  
 **Purpose:** Track implementation and evidence without treating planned work, unit tests, synthetic runs, or an in-progress workflow as real benchmark validation.
 
 ## Status key
@@ -15,11 +15,11 @@
 
 | Evidence | State at snapshot |
 |---|---|
-| Main CI for `44b53f8` | **GREEN:** GitHub Actions run [45382962876](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382962876) completed successfully. |
-| Real EuRoC paired benchmark for `7559dd5` | **YELLOW:** run [45380153306](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45380153306) completed and uploaded artifact `shield-vio-real-euroc-mh01-paired` (artifact ID `14912809427`; SHA-256 `9772d64f57e9973fa47d93b8725059693b2df025aa65dcb9b0651fc243677179`). The pipeline passed, but the estimator result is unusable and smoke prediction is single-class; see findings below. |
+| Main CI evidence | **GREEN on candidate heads:** CI runs [45386831620](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45386831620), [45387125611](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45387125611), and [45387445677](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45387445677) passed. The last candidate also passed the real EuRoC workflow before squash-merge `d1e1306`. |
+| Real EuRoC paired benchmark | **RED for estimator accuracy / GREEN for execution:** run [45387445711](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45387445711) uploaded artifact `shield-vio-real-euroc-mh01-paired` (ID `14916768372`; SHA-256 `86b0a696d2e352c6b587f259ad119b9ed81ed745fd2bc5b112a3a43bf95062dd`). The new audit reports an 80.63 m GT path and ATE/path ratios of 860.41 (IMU-only) and 950.48 (rotation update); see evidence below. |
 | PR #105 | **Integrated:** merged to `main` at `7559dd5`; its CI run [45380153039](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45380153039) passed. It adds canonical held-out probability evaluation and explicitly limits the result to non-confirmatory probability metrics. |
 | PR #104 | **Integrated:** squash-merged as `0946e069`; CI [45382473614](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473614) and pinned OpenVINS `MH_01_easy` replay [45382473608](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473608) passed. Artifact `14915278229` (SHA-256 `366b13ee50c001bbda6999eaba9668e9a41ef94e6cbd67c06554e4978c7330cb`) records the headless patch digest, 138 s replay and 0.09214 m ATE RMSE. This is one non-confirmatory sequence smoke; primary failure labels have 0 events and 0 positive windows at all tested horizons, so detector discrimination is undefined. |
-| Existing artifacts | `docs/publication/evidence/euroc_mh01_smoke_v1.json`; inspect its provenance and scope before using it as evidence. |
+| Synthetic seed provenance | PR #108 merged as `584874f`; CI [45385915303](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45385915303) passed. Reports now read the actual seed, with seed-42 and invalid-type regression coverage. |\n| OpenVINS runtime regression coverage | PR #110 merged as `44dec65`; CI [45386831620](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45386831620) passed. PR #111 merged as `2ecf1b6`; CI [45387125611](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45387125611) passed, including ROS setup-before-nounset guard. |\n| Existing artifacts | `docs/publication/evidence/euroc_mh01_smoke_v1.json`; inspect its provenance and scope before using it as evidence. |
 | Repository shape | Existing Python estimator, experiment, evaluation, dataset, and test packages; no ROS 2 package, Dockerfile, or complete manuscript source was present in the audited main tree. |
 
 
@@ -35,14 +35,36 @@ The `mh01-paired` job completed successfully, including checksum-verified downlo
 
 **Disposition:** preserve the artifact as a failure/diagnostic result. Do not tune or relabel it as a benchmark success. Investigate unit/frame conventions, IMU propagation and bias initialization against independent known-motion checks, then rerun the same training-split sequence with a predeclared diagnostic protocol before proceeding to other sequences.
 
-## OpenVINS headless replay findings — run 45382473608\n\nThe previously observed process exit 134 and `LibraryUnloadException` for `libimage_transport_plugins.so` were not reproduced after patching the pinned `ROS1Visualizer.cpp` to avoid constructing its three unused visualization publishers. The pinned serial estimator built and replayed checksum-verified EuRoC `MH_01_easy` for 138 s without passing ground truth to the estimator. The workflow and post-steps completed successfully.\n\n- Trajectory export: 2,761 associated samples; ATE RMSE **0.09214 m**; translational RPE RMSE **0.01628 m** at one-sample delta.\n- Primary observables are ready for label construction; 2,741 samples have complete observability and 42 are censored. The frozen primary failure definition yields **0 events** and **0 positive windows** for horizons 0.5–5 s, including 0/2,701 positive windows at 2 s. Discrimination is undefined.\n- The run remains `PUBLIC_DATASET_DEVELOPMENT`, `confirmatory: false`; performance and prediction quality are not established.\n\n**Disposition:** the headless transport fix is runtime-verified for this pinned serial run. It resolves the reported teardown exception in this execution, but generalization to other OpenVINS modes/versions is untested. Preserve the artifact and do not describe this sequence as predictor validation.\n\n## Workstream status and acceptance gates
+## OpenVINS headless replay findings — run 45382473608
+
+The previously observed process exit 134 and `LibraryUnloadException` for `libimage_transport_plugins.so` were not reproduced after patching pinned `ROS1Visualizer.cpp` to avoid constructing its three unused visualization publishers. The pinned serial estimator built and replayed checksum-verified EuRoC `MH_01_easy` for 138 s without passing ground truth to the estimator.
+
+- Trajectory export: 2,761 associated samples; ATE RMSE **0.09214 m**; translational RPE RMSE **0.01628 m** at one-sample delta.
+- Primary observables are ready for label construction; 2,741 samples have complete observability and 42 are censored. The frozen primary failure definition yields **0 events** and **0 positive windows** for horizons 0.5–5 s, including 0/2,701 positive windows at 2 s. Discrimination is undefined.
+- The run remains `PUBLIC_DATASET_DEVELOPMENT`, `confirmatory: false`; performance and prediction quality are not established.
+
+**Disposition:** the headless transport fix is runtime-verified for this pinned serial run. Generalization to other OpenVINS modes/versions is untested. Preserve the artifact and do not describe this sequence as predictor validation.
+
+## EuRoC accuracy audit — run 45387445711
+
+The paired workflow reran both ESKF configurations, independent `evo` evaluation, V2 label construction, and the public smoke gate. It uploaded artifact `14916768372` (SHA-256 `86b0a696d2e352c6b587f259ad119b9ed81ed745fd2bc5b112a3a43bf95062dd`).
+
+- EuRoC `MH_01_easy` ground-truth path length: **80.63 m**.
+- IMU-only ESKF: ATE RMSE **69,371.62 m**, ratio **860.41×** path length; translational RPE **71.68 m**.
+- ESKF plus monocular relative-rotation updates: ATE RMSE **76,633.96 m**, ratio **950.48×**; translational RPE **80.26 m**.
+- Both receive a coarse catastrophic-drift warning. This is a diagnostic only, not a scientific pass/fail threshold.
+- Smoke gate: 10 eligible windows, 10 positive, 0 negative. The gate passes pipeline integrity but discrimination remains undefined; evidence is `PUBLIC_DATASET_SMOKE`, `confirmatory: false`.
+
+**Disposition:** retain the severe drift as a RED estimator-accuracy finding. Do not tune on held-out sequences; diagnose frame, unit, initialization, and propagation conventions on predeclared training data before scaling the benchmark.
+
+## Workstream status and acceptance gates
 
 | Workstream | Status | Current implementation / evidence | Remaining acceptance criteria |
 |---|---|---|---|
-| Repository, PR, and CI audit | YELLOW | PR #104, #105 and #107 merged; PR #100 and #96 remain open and need disposition review. Main CI passed at the prior main snapshot. | Review remaining open PRs and relevant issues, branch history, workflow logs and experiment artifacts; resolve remaining integration work; keep this record current. |
-| CI/CD and regression suite | YELLOW | Latest main CI passes; CI failures existed on earlier commits and were addressed before the current base. | Run full required checks on the final candidate, inspect failures instead of suppressing them, and confirm all required workflows pass on the release commit. |
+| Repository, PR, and CI audit | YELLOW | PRs #104, #105, #107–#111 are integrated; stale #5, #87, #90, #96 and #100 were closed as obsolete/superseded. PR #8 remains open, 326 commits behind, and needs adaptation review. No open issues were found in the audit. | Review PR #8 against current APIs, inspect remaining branches/workflows/artifacts, and keep this record current. |
+| CI/CD and regression suite | YELLOW | Ruff, pytest, deterministic synthetic regression, and the real EuRoC smoke passed on PR #109 candidate; main CI run for the latest merged commit is not yet recorded. Earlier CLI-escaping failure was diagnosed and fixed before the passing run. | Run full required checks on the final release candidate, inspect failures instead of suppressing them, and confirm all required workflows pass on the release commit. |
 | VIO estimation backend | YELLOW | Research implementations exist for feature tracking, IMU preintegration, a 15-state ESKF, calibration/stereo geometry, trajectory output, and loop closure, with numerical/unit tests. README correctly calls these research prototypes. | Independently validate coordinate/quaternion conventions, Jacobians and covariance consistency; exercise complete calibrated camera–IMU synchronization, initialization/recovery, stereo and monocular pipelines; document limitations with measured evidence. |
-| EuRoC benchmark | YELLOW | One checksum-verified mirrored `MH_01_easy` run completed on real sensor/GT data with CI and uploaded artifacts. This source receipt explicitly says it does not establish identity with the current ETH archive and is non-confirmatory. | Diagnose the catastrophic trajectory drift before scaling; verify official-source identity and frozen split; execute all 11 registered sequences; inspect per-sequence trajectories, diagnostics, failures and runtime; publish reproducible metrics/artifacts and grouped uncertainty. |
+| EuRoC benchmark | RED | One checksum-verified `MH_01_easy` paired smoke completed. Both ESKF variants diverge catastrophically by 860–950× path length; OpenVINS has a separate successful 138 s smoke. All are non-confirmatory and only one sequence is tested. | Diagnose ESKF failure on development data; verify source identity; execute all 11 registered sequences under the frozen split; inspect outcomes and runtime; report grouped uncertainty. |
 | TUM-VI benchmark | WHITE | Dataset adapter/stream infrastructure is mentioned in existing documentation; no complete official sequence/checksum registry or executed benchmark evidence found in this audit. | Freeze official inventory, calibration/fisheye handling, partial-ground-truth rules, and shifted-test protocol before evaluating; run and report required sequences with censored/missing GT handled explicitly. |
 | OpenVINS comparison | YELLOW | Pinned headless serial replay and V2 artifact pipeline pass for `MH_01_easy`; PR #104 records the fix. Artifact reports 0.09214 m ATE RMSE, but primary failure labels contain no events, so prediction discrimination is undefined. | Compare matched estimator inputs/conventions and assess additional EuRoC sequences; validate trajectory/covariance exports and cross-mode/version behavior. Keep failed runs visible. |
 | Failure prediction models | YELLOW | Causal health features, failure targets, split/leakage guards, rules/logistic infrastructure, and frozen predictor/canonical evaluation code exist. | Implement and fairly compare required tree and temporal models where data volume supports them; evaluate all horizons; prove sequence/preprocessing isolation and seal models before held-out scoring. |
