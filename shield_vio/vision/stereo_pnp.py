@@ -78,6 +78,8 @@ class StereoPnPFrontend:
         rotation_right_left: np.ndarray,
         translation_right_left_m: np.ndarray,
         *,
+        left_distortion_coefficients: np.ndarray | None = None,
+        right_distortion_coefficients: np.ndarray | None = None,
         max_features: int = 1000,
         ratio_threshold: float = 0.75,
         max_epipolar_error_px: float = 2.0,
@@ -97,6 +99,12 @@ class StereoPnPFrontend:
         self.right_camera_matrix = _camera_matrix(right_camera_matrix, "right_camera_matrix")
         self.rotation_right_left = _rotation(rotation_right_left)
         self.translation_right_left_m = _translation(translation_right_left_m)
+        self.left_distortion_coefficients = _distortion_coefficients(
+            left_distortion_coefficients, "left_distortion_coefficients"
+        )
+        self.right_distortion_coefficients = _distortion_coefficients(
+            right_distortion_coefficients, "right_distortion_coefficients"
+        )
         self.ratio_threshold = float(ratio_threshold)
         self.max_epipolar_error_px = float(max_epipolar_error_px)
         self.max_stereo_reprojection_error_px = float(max_stereo_reprojection_error_px)
@@ -122,18 +130,12 @@ class StereoPnPFrontend:
             return _empty_landmarks(0)
         left_points = np.asarray([keypoints_left[m.queryIdx].pt for m in matches], dtype=float)
         right_points = np.asarray([keypoints_right[m.trainIdx].pt for m in matches], dtype=float)
-        normalized_left = cv2.undistortPoints(
-            left_points.reshape(-1, 1, 2),
-            self.left_camera_matrix,
-            None,
-            P=self.left_camera_matrix
-        ).reshape(-1, 2)
-        normalized_right = cv2.undistortPoints(
-            right_points.reshape(-1, 1, 2),
-            self.right_camera_matrix,
-            None,
-            P=self.right_camera_matrix
-        ).reshape(-1, 2)
+        undistorted_left = _undistort_pixels(
+            left_points, self.left_camera_matrix, self.left_distortion_coefficients
+        )
+        undistorted_right = _undistort_pixels(
+            right_points, self.right_camera_matrix, self.right_distortion_coefficients
+        )
         fundamental = _fundamental_from_calibration(
             self.left_camera_matrix,
             self.right_camera_matrix,
@@ -141,11 +143,11 @@ class StereoPnPFrontend:
             self.translation_right_left_m,
         )
         lines_right = cv2.computeCorrespondEpilines(
-            normalized_left.reshape(-1, 1, 2), 1, fundamental
+            undistorted_left.reshape(-1, 1, 2), 1, fundamental
         ).reshape(-1, 3)
         numerator = np.abs(
-            lines_right[:, 0] * normalized_right[:, 0]
-            + lines_right[:, 1] * normalized_right[:, 1]
+            lines_right[:, 0] * undistorted_right[:, 0]
+            + lines_right[:, 1] * undistorted_right[:, 1]
             + lines_right[:, 2]
         )
         denominator = np.linalg.norm(lines_right[:, :2], axis=1)
@@ -156,8 +158,8 @@ class StereoPnPFrontend:
         if not np.any(epipolar_keep):
             return _empty_landmarks(len(matches))
         filtered_matches = [match for match, keep in zip(matches, epipolar_keep) if keep]
-        filtered_left = left_points[epipolar_keep]
-        filtered_right = right_points[epipolar_keep]
+        filtered_left = undistorted_left[epipolar_keep]
+        filtered_right = undistorted_right[epipolar_keep]
         triangulated: StereoTriangulationResult = triangulate_stereo_points(
             filtered_left,
             filtered_right,
@@ -201,7 +203,10 @@ class StereoPnPFrontend:
         object_points = np.asarray(
             [previous_landmarks.points_left_m[m.queryIdx] for m in matches], dtype=np.float64
         )
-        image_points = np.asarray([keypoints[m.trainIdx].pt for m in matches], dtype=np.float64)
+        image_points_raw = np.asarray([keypoints[m.trainIdx].pt for m in matches], dtype=np.float64)
+        image_points = _undistort_pixels(
+            image_points_raw, self.left_camera_matrix, self.left_distortion_coefficients
+        )
         success, rotation_vector, translation, inlier_indices = cv2.solvePnPRansac(
             object_points,
             image_points,
@@ -283,6 +288,33 @@ def _gray(image: np.ndarray) -> np.ndarray:
             raise ValueError("image contains non-finite values")
         array = np.clip(array, 0, 255).astype(np.uint8)
     return array
+
+
+def _distortion_coefficients(value: np.ndarray | None, name: str) -> np.ndarray | None:
+    if value is None:
+        return None
+    coefficients = np.asarray(value, dtype=float).reshape(-1)
+    if coefficients.size not in (4, 5, 8, 12, 14) or not np.all(np.isfinite(coefficients)):
+        raise ValueError(f"{name} must contain 4, 5, 8, 12, or 14 finite coefficients")
+    return coefficients.copy()
+
+
+def _undistort_pixels(
+    points_px: np.ndarray,
+    camera_matrix: np.ndarray,
+    distortion_coefficients: np.ndarray | None,
+) -> np.ndarray:
+    points = np.asarray(points_px, dtype=float)
+    if points.ndim != 2 or points.shape[1:] != (2,) or not np.all(np.isfinite(points)):
+        raise ValueError("points_px must be a finite Nx2 array")
+    if not len(points):
+        return np.empty((0, 2), dtype=float)
+    return cv2.undistortPoints(
+        points.reshape(-1, 1, 2),
+        camera_matrix,
+        distortion_coefficients,
+        P=camera_matrix,
+    ).reshape(-1, 2)
 
 
 def _camera_matrix(value: np.ndarray, name: str) -> np.ndarray:
