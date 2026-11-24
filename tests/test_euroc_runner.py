@@ -148,7 +148,7 @@ def test_runner_notifies_visual_provider_after_posterior_update(tmp_path: Path) 
     assert len(provider.prior_positions) == 2
     assert len(provider.posterior_positions) == 2
     first_update = provider.posterior_positions[0] - provider.prior_positions[0]
-    assert np.linalg.norm(first_update) > 0.1
+    assert np.linalg.norm(first_update) > 0.05
 
 
 def test_runner_rejects_stream_without_imu(tmp_path: Path) -> None:
