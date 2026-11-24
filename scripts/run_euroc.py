@@ -35,12 +35,21 @@ def build_stereo_pnp_provider(sequence_root: Path) -> StereoPnPVisualProvider:
     calibration_root = sequence_root / "mav0"
     left = load_camera_calibration(calibration_root / "cam0" / "sensor.yaml")
     right = load_camera_calibration(calibration_root / "cam1" / "sensor.yaml")
+    supported_distortion_models = {"radial-tangential", "radtan"}
+    models = {left.distortion_model.lower(), right.distortion_model.lower()}
+    if not models.issubset(supported_distortion_models):
+        raise ValueError(
+            "stereo-PnP supports radial-tangential camera distortion; "
+            f"received {sorted(models)}"
+        )
     transform_right_left = stereo_transform_right_left(left, right)
     frontend = StereoPnPFrontend(
         camera_matrix_from_intrinsics(left.intrinsics),
         camera_matrix_from_intrinsics(right.intrinsics),
         transform_right_left[:3, :3],
         transform_right_left[:3, 3],
+        left_distortion_coefficients=left.distortion_coefficients,
+        right_distortion_coefficients=right.distortion_coefficients,
     )
     return StereoPnPVisualProvider(frontend, left.transform_body_sensor)
 

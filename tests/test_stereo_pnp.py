@@ -125,6 +125,24 @@ def test_build_landmarks_passes_camera_matrix_to_opencv(
 
 
 
+
+def test_undistort_pixels_removes_radial_tangential_distortion() -> None:
+    camera = _camera_matrix()
+    distortion = np.array([-0.2, 0.05, 0.0, 0.0])
+    point_camera = np.array([[1.0, 0.7, 2.0]])
+    distorted = cv2.projectPoints(
+        point_camera, np.zeros(3), np.zeros(3), camera, distortion
+    )[0].reshape(-1, 2)
+    expected = cv2.projectPoints(
+        point_camera, np.zeros(3), np.zeros(3), camera, None
+    )[0].reshape(-1, 2)
+
+    recovered = stereo_pnp._undistort_pixels(distorted, camera, distortion)
+
+    np.testing.assert_allclose(recovered, expected, atol=1e-3)
+    assert np.linalg.norm(distorted - expected) > 5.0
+
+
 def test_pnp_returns_none_with_insufficient_matches(monkeypatch: pytest.MonkeyPatch) -> None:
     camera = _camera_matrix()
     frontend = StereoPnPFrontend(camera, camera, np.eye(3), np.array([-0.11, 0.0, 0.0]))
