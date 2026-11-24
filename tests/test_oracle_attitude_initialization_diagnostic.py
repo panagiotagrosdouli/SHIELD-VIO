@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from scripts.oracle_attitude_initialization_diagnostic import compare_initial_attitudes
 
@@ -20,9 +21,10 @@ def test_oracle_attitude_ablation_is_explicit_and_reduces_synthetic_drift() -> N
     gravity = np.array([0.0, 0.0, -9.80665])
     world_acceleration = np.array([0.4, 0.0, 0.0])
     specific_force = rotation.T @ (world_acceleration - gravity)
+    gyro_bias = np.array([0.0, 0.0, 0.03])
     imu = np.column_stack([
         t * 1e9,
-        np.zeros((count, 3)),
+        np.tile(gyro_bias, (count, 1)),
         np.tile(specific_force, (count, 1)),
     ])
     gt_positions = 0.5 * t[:, None] ** 2 * world_acceleration
@@ -36,8 +38,9 @@ def test_oracle_attitude_ablation_is_explicit_and_reduces_synthetic_drift() -> N
 
     assert report["ground_truth_used_for_initialization"] is True
     assert report["confirmatory"] is False
-    assert report["oracle_groundtruth_attitude_initialization"]["rpe_translation_rmse_m_delta_1"] < 1e-8
+    assert report["oracle_gyro_bias_radps"] == pytest.approx(gyro_bias, abs=1e-10)
+    assert report["oracle_attitude_and_gyro_bias"]["rpe_translation_rmse_m_delta_1"] < 1e-8
     assert (
-        report["baseline_identity_initialization"]["rpe_translation_rmse_m_delta_1"]
-        > report["oracle_groundtruth_attitude_initialization"]["rpe_translation_rmse_m_delta_1"]
+        report["baseline_identity_zero_bias"]["rpe_translation_rmse_m_delta_1"]
+        > report["oracle_attitude_and_gyro_bias"]["rpe_translation_rmse_m_delta_1"]
     )
