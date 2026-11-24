@@ -306,6 +306,17 @@ jobs:
           PY
           fi
 
+      - name: Audit stereo-PnP update and filter health
+        run: |
+          run_dir=results/real_euroc/MH_01_easy/stereo_pnp
+          output=results/real_euroc/MH_01_easy/stereo_pnp_diagnostic.json
+          if [[ -f "$run_dir/metrics.json" ]]; then
+            python scripts/audit_euroc_stereo_pnp.py "$run_dir" --output "$output"
+          else
+            cp "$run_dir/stereo_status.json" "$output"
+            cat "$output"
+          fi
+
       - name: Sweep gyro-bias prior covariance on real EuRoC
         run: |
           python - <<'PY'
