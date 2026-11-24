@@ -32,8 +32,18 @@ def build_report(results_dir: str | Path, *, rpe_delta: int = 1) -> dict[str, ob
         rpe_delta=rpe_delta,
         align=True,
     )
+    summary_path = root / "summary.json"
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if not isinstance(summary, dict):
+            raise ValueError(f"Synthetic benchmark summary must be a JSON object: {summary_path}")
+        seed = summary.get("seed", 7)
+        if not isinstance(seed, int) or isinstance(seed, bool):
+            raise ValueError(f"Synthetic benchmark seed must be an integer: {summary_path}")
+    else:
+        seed = 7  # Backward-compatible default for trajectory-only inputs.
     result = {
-        "sequence": "synthetic_seed_7",
+        "sequence": f"synthetic_seed_{seed}",
         "status": "ok",
         "estimate_path": str(root / "estimated_trajectory.csv"),
         **asdict(metrics),
