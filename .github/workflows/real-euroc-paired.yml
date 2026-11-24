@@ -161,7 +161,7 @@ jobs:
               if ! curl \
                 --fail --location --proto '=https' \
                 --retry 1 --retry-all-errors --retry-delay 3 \
-                --connect-timeout 15 --max-time 2400 \
+                --connect-timeout 15 --max-time 600 \
                 --output "$official_bag" "$EUROC_ETH_BAG_URL"; then
                 rm -f "$official_bag"
               fi
