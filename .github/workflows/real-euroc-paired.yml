@@ -7,12 +7,12 @@ on:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
       - 'scripts/run_paper_vertical_slice.py'
-      - 'scripts/validate_public_smoke.py'
+      - 'scripts/validate_public_smoke.py'\n      - 'scripts/audit_real_euroc_accuracy.py'
       - 'scripts/convert_euroc_rosbag.py'
       - 'scripts/export_primary_observables.py'
       - 'scripts/export_primary_failure_targets.py'
       - 'scripts/build_public_v2_canonical.py'
-      - 'tests/test_validate_public_smoke.py'
+      - 'tests/test_validate_public_smoke.py'\n      - 'tests/test_real_euroc_accuracy_audit.py'
       - 'tests/test_primary_observables.py'
       - 'tests/test_convert_euroc_rosbag.py'
       - 'pyproject.toml'
@@ -24,7 +24,7 @@ on:
     paths:
       - 'shield_vio/**'
       - 'scripts/run_euroc.py'
-      - 'scripts/compare_real_euroc_runs.py'
+      - 'scripts/compare_real_euroc_runs.py'\n      - 'scripts/audit_real_euroc_accuracy.py'
       - 'scripts/validate_public_smoke.py'
       - 'scripts/convert_euroc_rosbag.py'
       - 'scripts/export_primary_observables.py'
@@ -329,6 +329,14 @@ jobs:
               --save_results "results/real_euroc/MH_01_easy/upstream_evo/${estimator}_ape.zip"
             unzip -tq "results/real_euroc/MH_01_easy/upstream_evo/${estimator}_ape.zip"
           done
+
+      - name: Audit real estimator drift versus ground-truth motion
+        run: |
+          python scripts/audit_real_euroc_accuracy.py \\
+            --groundtruth data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv \\
+            --baseline-metrics results/real_euroc/MH_01_easy/imu_only/metrics.json \\
+            --visual-metrics results/real_euroc/MH_01_easy/opencv_rotation/metrics.json \\
+            --output results/real_euroc/MH_01_easy/accuracy_audit.json
 
       - name: Run public-data failure-prediction vertical slice
         run: |
