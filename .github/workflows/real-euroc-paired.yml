@@ -65,8 +65,15 @@ jobs:
           path: data/euroc/MH_01_easy.bag
           key: euroc-mh01-rosbag-57f440ccd68ec8dc8f9461269f5909656b86198bac3adfd677b1fcc7a1428fa9
 
+      - name: Restore direct ETH EuRoC bag cache
+        uses: actions/cache@v4
+        with:
+          path: data/euroc/MH_01_easy_eth.bag
+          key: euroc-mh01-eth-direct-rosbag-v1
+
       - name: Acquire EuRoC MH_01_easy
         env:
+          EUROC_ETH_BAG_URL: https://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.bag
           EUROC_HTTPS_URL: https://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip
           EUROC_HTTP_URL: http://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/machine_hall/MH_01_easy/MH_01_easy.zip
           EUROC_BAG_MIRROR_URL: https://huggingface.co/datasets/kavehsgh/EuRoC_MAV_Dataset_Machine_Hall_Easy_01/resolve/main/MH_01_easy.bag?download=true
@@ -133,18 +140,9 @@ jobs:
           print(json.dumps(receipt, indent=2, sort_keys=True))
           PY
           else
-            echo "Legacy ETH endpoints unavailable; using checksum-verified portable smoke mirror."
+            echo "Legacy ETH ZIP endpoints unavailable; trying the official sequence ROS bag."
             rm -f "$archive"
-            bag=data/euroc/MH_01_easy.bag
-            if [[ ! -f "$bag" ]]; then
-              curl \
-                --fail --location \
-                --retry 5 --retry-all-errors --retry-delay 5 \
-                --connect-timeout 30 --max-time 2400 \
-                --output "$bag" "$EUROC_BAG_MIRROR_URL"
-            fi
-            echo "$EUROC_BAG_SHA256  $bag" | sha256sum --check --strict
-
+            official_bag=data/euroc/MH_01_easy_eth.bag
             openvins_dir=data/euroc/openvins-pinned
             mkdir -p "$openvins_dir"
             openvins_base="https://raw.githubusercontent.com/rpng/open_vins/$OPENVINS_REVISION"
@@ -158,21 +156,70 @@ jobs:
               --output "$openvins_dir/kalibr_imu_chain.yaml" \
               "$openvins_base/config/euroc_mav/kalibr_imu_chain.yaml"
 
-            rm -rf "$sequence_root"
-            python scripts/convert_euroc_rosbag.py "$bag" \
-              --output "$sequence_root" \
-              --sequence MH_01_easy \
-              --expected-bag-sha256 "$EUROC_BAG_SHA256" \
-              --source-url "$EUROC_BAG_MIRROR_URL" \
-              --openvins-ground-truth "$openvins_dir/MH_01_easy.txt" \
-              --openvins-imucam-calibration "$openvins_dir/kalibr_imucam_chain.yaml" \
-              --openvins-imu-calibration "$openvins_dir/kalibr_imu_chain.yaml" \
-              --openvins-revision "$OPENVINS_REVISION"
+            official_converted="false"
+            if [[ ! -f "$official_bag" ]]; then
+              if ! curl \
+                --fail --location --proto '=https' \
+                --retry 1 --retry-all-errors --retry-delay 3 \
+                --connect-timeout 15 --max-time 2400 \
+                --output "$official_bag" "$EUROC_ETH_BAG_URL"; then
+                rm -f "$official_bag"
+              fi
+            fi
+            if [[ -f "$official_bag" && "$(stat -c '%s' "$official_bag")" -gt 100000000 ]]; then
+              official_sha256="$(sha256sum "$official_bag" | awk '{print $1}')"
+              rm -rf "$sequence_root"
+              if python scripts/convert_euroc_rosbag.py "$official_bag" \
+                --output "$sequence_root" \
+                --sequence MH_01_easy \
+                --expected-bag-sha256 "$official_sha256" \
+                --source-url "$EUROC_ETH_BAG_URL" \
+                --openvins-ground-truth "$openvins_dir/MH_01_easy.txt" \
+                --openvins-imucam-calibration "$openvins_dir/kalibr_imucam_chain.yaml" \
+                --openvins-imu-calibration "$openvins_dir/kalibr_imu_chain.yaml" \
+                --openvins-revision "$OPENVINS_REVISION"; then
+                official_converted="true"
+                acquisition_mode="official_eth_legacy_rosbag_recorded_sha256"
+                source_url="$EUROC_ETH_BAG_URL"
+              else
+                echo "Official ROS bag did not convert; falling back to the checksum-pinned smoke mirror."
+                rm -rf "$sequence_root"
+                rm -f "$official_bag"
+              fi
+            else
+              echo "Official ROS bag unavailable or unexpectedly small; falling back to the checksum-pinned smoke mirror."
+              rm -f "$official_bag"
+            fi
+
+            if [[ "$official_converted" != "true" ]]; then
+              bag=data/euroc/MH_01_easy.bag
+              if [[ ! -f "$bag" ]]; then
+                curl \
+                  --fail --location \
+                  --retry 5 --retry-all-errors --retry-delay 5 \
+                  --connect-timeout 30 --max-time 2400 \
+                  --output "$bag" "$EUROC_BAG_MIRROR_URL"
+              fi
+              echo "$EUROC_BAG_SHA256  $bag" | sha256sum --check --strict
+              rm -rf "$sequence_root"
+              python scripts/convert_euroc_rosbag.py "$bag" \
+                --output "$sequence_root" \
+                --sequence MH_01_easy \
+                --expected-bag-sha256 "$EUROC_BAG_SHA256" \
+                --source-url "$EUROC_BAG_MIRROR_URL" \
+                --openvins-ground-truth "$openvins_dir/MH_01_easy.txt" \
+                --openvins-imucam-calibration "$openvins_dir/kalibr_imucam_chain.yaml" \
+                --openvins-imu-calibration "$openvins_dir/kalibr_imu_chain.yaml" \
+                --openvins-revision "$OPENVINS_REVISION"
+              acquisition_mode="checksum_verified_rosbag_mirror_plus_pinned_openvins"
+              source_url="$EUROC_BAG_MIRROR_URL"
+            fi
 
             cp "$sequence_root/portable_acquisition_manifest.json" \
               results/real_euroc/MH_01_easy/portable_acquisition_manifest.json
-            python - <<'PY'
+            SOURCE_URL="$source_url" ACQUISITION_MODE="$acquisition_mode" python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           portable = json.loads(
@@ -183,15 +230,15 @@ jobs:
               "schema_version": 2,
               "dataset": "EuRoC_MAV",
               "sequence": "MH_01_easy",
-              "source_url": portable["source"]["bag_url"],
+              "source_url": os.environ["SOURCE_URL"],
               "source_sha256": portable["source"]["bag_sha256"],
               "source_bytes": portable["source"]["bag_bytes"],
-              "acquisition_mode": "checksum_verified_rosbag_mirror_plus_pinned_openvins",
+              "acquisition_mode": os.environ["ACQUISITION_MODE"],
               "confirmatory_identity": False,
               "claim_boundary": portable["claim_boundary"],
           }
           Path("results/real_euroc/MH_01_easy/dataset_download_receipt.json").write_text(
-              json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+              json.dumps(receipt, indent=2, sort_keys=True) + "\\n",
               encoding="utf-8",
           )
           print(json.dumps(receipt, indent=2, sort_keys=True))
