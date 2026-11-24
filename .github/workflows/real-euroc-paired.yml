@@ -33,6 +33,8 @@ on:
       - 'scripts/compare_real_euroc_runs.py'
       - 'scripts/audit_real_euroc_accuracy.py'
       - 'scripts/audit_euroc_orientation.py'
+      - 'scripts/audit_euroc_imu_frames.py'
+      - 'tests/test_audit_euroc_imu_frames.py'
       - 'tests/test_audit_euroc_orientation.py'
       - 'scripts/validate_public_smoke.py'
       - 'scripts/convert_euroc_rosbag.py'
