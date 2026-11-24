@@ -79,6 +79,30 @@ def test_metric_pnp_recovers_known_motion(monkeypatch: pytest.MonkeyPatch) -> No
     assert result.reprojection_rmse_px < 1e-5
 
 
+def test_build_landmarks_uses_camera_matrices_for_opencv_points() -> None:
+    camera = _camera_matrix()
+    baseline = np.array([-0.11, 0.0, 0.0])
+    frontend = StereoPnPFrontend(
+        camera,
+        camera,
+        np.eye(3),
+        baseline,
+        max_features=1200,
+        ratio_threshold=0.9,
+        max_epipolar_error_px=1.5,
+        max_stereo_reprojection_error_px=2.0,
+    )
+    points = _scene()
+    right_transform = np.eye(4)
+    right_transform[:3, 3] = baseline
+    left_image = _render(points, camera, np.eye(4))
+    right_image = _render(points, camera, right_transform)
+
+    landmarks = frontend.build_landmarks(left_image, right_image)
+
+    assert landmarks.stereo_match_count > 0
+
+
 def test_pnp_returns_none_with_insufficient_matches(monkeypatch: pytest.MonkeyPatch) -> None:
     camera = _camera_matrix()
     frontend = StereoPnPFrontend(camera, camera, np.eye(3), np.array([-0.11, 0.0, 0.0]))
