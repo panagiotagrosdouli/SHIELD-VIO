@@ -62,13 +62,22 @@ def test_runtime_reuses_image_with_installed_dependencies() -> None:
     assert 'grep -q "not found"' in runtime
 
 
-def test_offline_replay_disables_only_compressed_visualization_plugins() -> None:
-    script = _runtime_command()
-    assert "for topic in trackhist loop_depth loop_depth_colored" in script
-    assert 'rosparam set "/ros1_serial_msckf/$topic/disable_pub_plugins"' in script
-    assert "image_transport/compressedDepth" in script
-    assert "image_transport/compressed," in script
-    assert "image_transport/theora" in script
-    assert "image_transport/raw" not in script
-    assert "__name:=ros1_serial_msckf" in script
-    assert script.index("disable_pub_plugins") < script.index("rosrun ov_msckf")
+def test_offline_replay_applies_headless_visualization_patch() -> None:
+    build = _command("Build pinned OpenVINS serial estimator")
+    patch_path = Path(__file__).resolve().parents[1] / "patches/openvins/headless-disable-image-transport.patch"
+    patch = patch_path.read_text(encoding="utf-8")
+    assert 'git -C "$ws/src/open_vins" apply /workspace/patches/openvins/headless-disable-image-transport.patch' in build
+    assert 'git -C "$ws/src/open_vins" diff --check' in build
+    assert build.index("git -C") < build.index("catkin_make")
+    assert "-  image_transport::ImageTransport it(*_nh);" in patch
+    assert '-  it_pub_tracks = it.advertise("trackhist", 2);' in patch
+    assert '-  it_pub_loop_img_depth = it.advertise("loop_depth", 2);' in patch
+    assert '-  it_pub_loop_img_depth_color = it.advertise("loop_depth_colored", 2);' in patch
+    runtime = _runtime_command()
+    assert "disable_pub_plugins" not in runtime
+    assert "__name:=ros1_serial_msckf" in runtime
+
+
+def test_openvins_receipt_records_headless_patch_hash() -> None:
+    receipt = _command("Create OpenVINS execution receipt")
+    assert '"visualization_patch_sha256": sha("patches/openvins/headless-disable-image-transport.patch")' in receipt
