@@ -1,7 +1,7 @@
 diff --git a/ov_msckf/src/ros/ROS1Visualizer.cpp b/ov_msckf/src/ros/ROS1Visualizer.cpp
 --- a/ov_msckf/src/ros/ROS1Visualizer.cpp
 +++ b/ov_msckf/src/ros/ROS1Visualizer.cpp
-@@ -42,8 +42,8 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
+@@ -42,7 +42,7 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
    mTfBr = std::make_shared<tf::TransformBroadcaster>();
  
 -  // Create image transport
@@ -11,7 +11,7 @@ diff --git a/ov_msckf/src/ros/ROS1Visualizer.cpp b/ov_msckf/src/ros/ROS1Visualiz
  
    // Setup pose and path publisher
    pub_poseimu = nh->advertise<geometry_msgs::PoseWithCovarianceStamped>("poseimu", 2);
-@@ -63,8 +63,6 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
+@@ -62,8 +62,6 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
    pub_points_sim = nh->advertise<sensor_msgs::PointCloud2>("points_sim", 2);
    PRINT_DEBUG("Publishing: %s\n", pub_points_sim.getTopic().c_str());
  
@@ -20,7 +20,7 @@ diff --git a/ov_msckf/src/ros/ROS1Visualizer.cpp b/ov_msckf/src/ros/ROS1Visualiz
    PRINT_DEBUG("Publishing: %s\n", it_pub_tracks.getTopic().c_str());
  
    // Groundtruth publishers
-@@ -77,9 +75,6 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
+@@ -77,7 +75,5 @@ ROS1Visualizer::ROS1Visualizer(std::shared_ptr<ros::NodeHandle> nh, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
    pub_loop_point = nh->advertise<sensor_msgs::PointCloud>("loop_feats", 2);
    pub_loop_extrinsic = nh->advertise<nav_msgs::Odometry>("loop_extrinsic", 2);
    pub_loop_intrinsics = nh->advertise<sensor_msgs::CameraInfo>("loop_intrinsics", 2);
