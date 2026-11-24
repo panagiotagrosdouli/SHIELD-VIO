@@ -10,6 +10,8 @@ on:
       - 'scripts/validate_public_smoke.py'
       - 'scripts/audit_real_euroc_accuracy.py'
       - 'scripts/audit_euroc_orientation.py'
+      - 'scripts/audit_euroc_imu_frames.py'
+      - 'tests/test_audit_euroc_imu_frames.py'
       - 'tests/test_audit_euroc_orientation.py'
       - 'scripts/convert_euroc_rosbag.py'
       - 'scripts/export_primary_observables.py'
@@ -189,6 +191,14 @@ jobs:
           print(json.dumps(receipt, indent=2, sort_keys=True))
           PY
           fi
+
+      - name: Audit raw IMU and ground-truth frame conventions
+        run: |
+          python scripts/audit_euroc_imu_frames.py \
+            --imu data/euroc/MH_01_easy/mav0/imu0/data.csv \
+            --groundtruth data/euroc/MH_01_easy/mav0/state_groundtruth_estimate0/data.csv \
+            --output results/real_euroc/MH_01_easy/imu_frame_consistency.json
+          cat results/real_euroc/MH_01_easy/imu_frame_consistency.json
 
       - name: Run real IMU-only baseline
         run: |
