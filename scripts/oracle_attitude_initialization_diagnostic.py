@@ -14,6 +14,7 @@ from shield_vio.datasets.euroc import read_imu_samples
 from shield_vio.estimation.error_state_ekf import ESKFState, ErrorStateEKF
 from shield_vio.evaluation.euroc import TimestampedTrajectory, associate_ground_truth, load_euroc_ground_truth
 from shield_vio.evaluation.metrics import ate, rpe
+from scripts.audit_euroc_imu_frames import audit_gyro_frames
 
 
 def _read_gt_orientations(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -35,13 +36,14 @@ def _propagate(
     accel: np.ndarray,
     gyro: np.ndarray,
     initial_orientation_wxyz: np.ndarray,
+    initial_gyro_bias_rps: np.ndarray | None = None,
 ) -> TimestampedTrajectory:
     state = ESKFState(
         position_m=np.zeros(3),
         velocity_mps=np.zeros(3),
         quaternion_wxyz=np.asarray(initial_orientation_wxyz, dtype=float).copy(),
         accel_bias_mps2=np.zeros(3),
-        gyro_bias_rps=np.zeros(3),
+        gyro_bias_rps=(np.zeros(3) if initial_gyro_bias_rps is None else np.asarray(initial_gyro_bias_rps, dtype=float).copy()),
         covariance=np.eye(15) * 1e-3,
         timestamp_s=float(timestamps_s[0]),
     )
@@ -106,27 +108,49 @@ def compare_initial_attitudes(
         raise ValueError("selected IMU timestamps must increase")
     orientation = gt_orientations_wxyz[nearest[start]]
     identity = np.array([1.0, 0.0, 0.0, 0.0])
-    baseline = _propagate(times, imu[start:stop, 4:7], imu[start:stop, 1:4], identity)
-    oracle = _propagate(times, imu[start:stop, 4:7], imu[start:stop, 1:4], orientation)
+    gyro_audit = audit_gyro_frames(
+        ti, imu[:, 1:4], gt_timestamps_s, gt_orientations_wxyz, max_gap_s=max_gap_s
+    )
+    oracle_bias = np.asarray(gyro_audit["estimated_constant_gyro_bias_radps"], dtype=float)
+    accel = imu[start:stop, 4:7]
+    gyro = imu[start:stop, 1:4]
+    baseline = _propagate(times, accel, gyro, identity)
+    attitude_oracle = _propagate(times, accel, gyro, orientation)
+    bias_oracle = _propagate(times, accel, gyro, identity, oracle_bias)
+    combined_oracle = _propagate(times, accel, gyro, orientation, oracle_bias)
     gt = TimestampedTrajectory(gt_timestamps_s, gt_positions_m)
     baseline_score = _score(baseline, gt)
-    oracle_score = _score(oracle, gt)
+    attitude_score = _score(attitude_oracle, gt)
+    bias_score = _score(bias_oracle, gt)
+    combined_score = _score(combined_oracle, gt)
     return {
-        "schema_version": "SHIELD_VIO_ORACLE_ATTITUDE_ABLATION_V1",
+        "schema_version": "SHIELD_VIO_ORACLE_ATTITUDE_GYRO_BIAS_ABLATION_V1",
         "sequence": "MH_01_easy",
         "start_timestamp_s": float(times[0]),
         "end_timestamp_s": float(times[-1]),
-        "baseline_identity_initialization": baseline_score,
-        "oracle_groundtruth_attitude_initialization": oracle_score,
-        "ate_relative_change_oracle_vs_identity": (
-            oracle_score["ate_rmse_m_se3"] / baseline_score["ate_rmse_m_se3"] - 1.0
+        "baseline_identity_zero_bias": baseline_score,
+        "oracle_groundtruth_attitude_only": attitude_score,
+        "oracle_gyro_bias_only": bias_score,
+        "oracle_attitude_and_gyro_bias": combined_score,
+        "oracle_gyro_bias_radps": oracle_bias.tolist(),
+        "oracle_gyro_bias_estimation": gyro_audit,
+        "ate_relative_change_attitude_only_vs_baseline": (
+            attitude_score["ate_rmse_m_se3"] / baseline_score["ate_rmse_m_se3"] - 1.0
+            if baseline_score["ate_rmse_m_se3"] > 0 else None
+        ),
+        "ate_relative_change_bias_only_vs_baseline": (
+            bias_score["ate_rmse_m_se3"] / baseline_score["ate_rmse_m_se3"] - 1.0
+            if baseline_score["ate_rmse_m_se3"] > 0 else None
+        ),
+        "ate_relative_change_combined_vs_baseline": (
+            combined_score["ate_rmse_m_se3"] / baseline_score["ate_rmse_m_se3"] - 1.0
             if baseline_score["ate_rmse_m_se3"] > 0 else None
         ),
         "ground_truth_used_for_initialization": True,
         "confirmatory": False,
         "claim_boundary": (
-            "Diagnostic oracle ablation only. Ground-truth attitude is deliberately supplied "
-            "to one replay to bound the effect of initial attitude; this is not an estimator result."
+            "Diagnostic oracle ablation only. Ground-truth attitude and a GT-derived gyro residual "
+            "are deliberately supplied in counterfactual replays; these are not estimator results."
         ),
     }
 
