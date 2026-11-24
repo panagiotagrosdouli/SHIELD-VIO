@@ -271,6 +271,41 @@ jobs:
             --output results/real_euroc/MH_01_easy/opencv_rotation \
             --opencv-rotation
 
+      - name: Run stereo PnP when complete stereo input is available
+        run: |
+          sequence=data/euroc/MH_01_easy
+          result=results/real_euroc/MH_01_easy/stereo_pnp
+          if [[ -f "$sequence/mav0/cam1/sensor.yaml" && -f "$sequence/mav0/cam1/data.csv" && -d "$sequence/mav0/cam1/data" ]]; then
+            python scripts/run_euroc.py "$sequence" \
+              --output "$result" \
+              --stereo-pnp
+            cat "$result/metrics.json"
+          else
+            mkdir -p "$result"
+            python - <<'PY'
+          import json
+          from pathlib import Path
+
+          status = {
+              "status": "skipped_missing_stereo_input",
+              "required": [
+                  "mav0/cam1/sensor.yaml",
+                  "mav0/cam1/data.csv",
+                  "mav0/cam1/data/",
+              ],
+              "claim_boundary": (
+                  "No stereo estimator result was produced because the acquired source "
+                  "did not contain a complete calibrated cam1 stream."
+              ),
+          }
+          Path("results/real_euroc/MH_01_easy/stereo_pnp/stereo_status.json").write_text(
+              json.dumps(status, indent=2, sort_keys=True) + "\\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(status, indent=2, sort_keys=True))
+          PY
+          fi
+
       - name: Sweep gyro-bias prior covariance on real EuRoC
         run: |
           python - <<'PY'
