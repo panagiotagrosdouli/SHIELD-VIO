@@ -36,6 +36,15 @@ Official paper sequence registry: `NOT_AVAILABLE` pending frozen official export
 
 `SMOKE_COMPLETE*` does not mean the estimator passed an accuracy gate. Retain this run as a diagnostic failure; do not use it to claim benchmark completion, confirmatory performance, model discrimination, or generalization.
 
+## OpenVINS headless smoke evidence (2026-11-24)
+
+Pinned OpenVINS revision `69488123ed9362dd44b6f28e7f4680abbff1442b` ran serially on `MH_01_easy` in [workflow run 45382473608](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45382473608) after the headless visualization-publisher patch. The runtime and artifact pipeline passed; the reported `LibraryUnloadException` did not recur. Artifact `14915278229` has SHA-256 `366b13ee50c001bbda6999eaba9668e9a41ef94e6cbd67c06554e4978c7330cb`.
+
+- The estimator received no ground truth. The receipt records a 138 s run and a verified bag digest.
+- 2,761 trajectory samples were associated; ATE RMSE was 0.09214 m and translational RPE RMSE was 0.01628 m at a one-sample delta.
+- Primary observability audit passed for label construction, with 2,741 fully observable samples and 42 censored. The frozen primary failure definition produced 0 events and 0 positive target windows at all horizons (0/2,701 at 2 s), so predictor discrimination is undefined.
+- This is one non-confirmatory development smoke, not an all-sequence comparison or an OpenVINS accuracy/generalization claim.
+
 ## Evidence boundary
 
-Only the one-sequence `PUBLIC_DATASET_SMOKE` execution above is recorded. No all-sequence `PUBLIC_DATASET_BENCHMARK` or `PUBLIC_DATASET_CONFIRMATORY` result is claimed. The remaining ten EuRoC matrix sequences and the TUM-VI sequence registry remain unavailable in this status. Historical Phase C note: at that implementation snapshot, no local real-dataset execution had been performed.
+The two one-sequence `PUBLIC_DATASET_SMOKE` executions above are smoke evidence only. No all-sequence `PUBLIC_DATASET_BENCHMARK` or `PUBLIC_DATASET_CONFIRMATORY` result is claimed. The remaining ten EuRoC matrix sequences and the TUM-VI sequence registry remain unavailable in this status. Historical Phase C note: at that implementation snapshot, no local real-dataset execution had been performed.
