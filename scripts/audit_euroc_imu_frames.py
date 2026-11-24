@@ -139,6 +139,20 @@ def audit_gyro_frames(
     direct_residual = measured - expected
     reverse_residual = measured + expected
     bias = np.mean(direct_residual, axis=0)
+    matched_midpoints = midpoint_t[valid]
+    segment_width_s = 10.0
+    segments = []
+    segment_ids = np.floor((matched_midpoints - matched_midpoints[0]) / segment_width_s).astype(int)
+    for segment_id in np.unique(segment_ids):
+        selected = segment_ids == segment_id
+        segment_residual = direct_residual[selected]
+        segments.append({
+            "start_relative_s": float(segment_id * segment_width_s),
+            "samples": int(selected.sum()),
+            "mean_residual_radps": np.mean(segment_residual, axis=0).tolist(),
+            "median_residual_radps": np.median(segment_residual, axis=0).tolist(),
+            "rmse_radps": float(np.sqrt(np.mean(segment_residual**2))),
+        })
     return {
         "associated_intervals": int(valid.sum()),
         "direct_body_rate_rmse_radps": float(np.sqrt(np.mean(direct_residual**2))),
@@ -146,6 +160,7 @@ def audit_gyro_frames(
             np.sqrt(np.mean((direct_residual - bias) ** 2))
         ),
         "estimated_constant_gyro_bias_radps": bias.tolist(),
+        "segments_10s": segments,
         "reversed_orientation_rate_rmse_radps": float(np.sqrt(np.mean(reverse_residual**2))),
         "claim_boundary": (
             "Post-hoc gyro convention diagnostic from finite differences of ground-truth "
