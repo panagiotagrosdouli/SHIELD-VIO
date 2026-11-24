@@ -104,6 +104,40 @@ class StereoPnPVisualProvider:
         )
 
 
+def _rotation_residual_jacobian(
+    rotation_vector_world: np.ndarray,
+    predicted_rotation_world_body: np.ndarray,
+) -> np.ndarray:
+    """Map a body-frame right attitude error into the world-frame residual.
+
+    The ESKF injects attitude errors on the right, so its three-vector is in
+    body coordinates. The residual below is log(R_measured R_predicted.T), in
+    world coordinates. Its local linearization is J_r^-1(r) R_predicted.
+    """
+    vector = np.asarray(rotation_vector_world, dtype=float).reshape(3)
+    rotation = np.asarray(predicted_rotation_world_body, dtype=float)
+    if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
+        raise ValueError("predicted attitude rotation must be a finite 3x3 matrix")
+    if not np.all(np.isfinite(vector)):
+        raise ValueError("rotation residual must be finite")
+    angle = float(np.linalg.norm(vector))
+    skew = np.array(
+        [
+            [0.0, -vector[2], vector[1]],
+            [vector[2], 0.0, -vector[0]],
+            [-vector[1], vector[0], 0.0],
+        ],
+        dtype=float,
+    )
+    angle_squared = angle * angle
+    if angle < 1e-4:
+        coefficient = 1.0 / 12.0 + angle_squared / 720.0 + angle_squared**2 / 30240.0
+    else:
+        coefficient = (1.0 - 0.5 * angle / np.tan(0.5 * angle)) / angle_squared
+    right_jacobian_inverse = np.eye(3) + 0.5 * skew + coefficient * (skew @ skew)
+    return right_jacobian_inverse @ rotation
+
+
 def build_metric_pose_measurement(
     state: EstimatorState,
     previous_world_body: np.ndarray,
@@ -134,7 +168,9 @@ def build_metric_pose_measurement(
 
     jacobian = np.zeros((6, 15), dtype=float)
     jacobian[:3, :3] = np.eye(3)
-    jacobian[3:, 6:9] = np.eye(3)
+    jacobian[3:, 6:9] = _rotation_residual_jacobian(
+        rotation_vector.reshape(3), predicted_world_body[:3, :3]
+    )
     covariance = np.diag(
         [position_std_m**2] * 3 + [rotation_std_rad**2] * 3
     )
