@@ -34,7 +34,7 @@ Official paper sequence registry: `NOT_AVAILABLE` pending frozen official export
 - The stationary-IMU gravity initialization was rejected because the selected input window did not meet its stationarity checks.
 - The checksum-verified source receipt uses a mirrored ROS bag with pinned OpenVINS calibration and ground truth; it explicitly does not establish identity with the current ETH archive.
 
-`SMOKE_COMPLETE*` does not mean the estimator passed an accuracy gate. Retain this run as a diagnostic failure; do not use it to claim benchmark completion, confirmatory performance, model discrimination, or generalization.
+`SMOKE_COMPLETE*` does not mean the estimator passed an accuracy gate. Retain this run as a diagnostic failure; do not use it to claim benchmark completion, confirmatory performance, model discrimination, or generalization.\n\nThe paired ESKF workflow was repeated with an automatic trajectory-accuracy audit in [run 45387445711](https://github.com/panagiotagrosdouli/SHIELD-VIO/actions/runs/45387445711), artifact `14916768372` (SHA-256 `86b0a696d2e352c6b587f259ad119b9ed81ed745fd2bc5b112a3a43bf95062dd`). The full ground-truth path length is **80.63 m**; ATE/path ratios are **860.41** for IMU-only ESKF and **950.48** for ESKF plus monocular rotation. Both receive a coarse catastrophic-drift warning. The workflow execution and smoke gate pass, but the estimator accuracy does not; the warning is diagnostic, not a benchmark acceptance threshold.
 
 ## OpenVINS headless smoke evidence (2026-11-24)
 
