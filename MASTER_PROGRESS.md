@@ -81,12 +81,12 @@ The paired workflow reran both ESKF configurations, independent `evo` evaluation
 
 ## Immediate execution queue
 
-1. Observe completion of main EuRoC paired run `45380153306`; inspect job logs and uploaded artifacts before changing benchmark status.
-2. Resolve PR #104 against current main, reproduce the OpenVINS failure in its pinned workflow, and require a successful runtime job before describing the exception as fixed.
-3. Reconcile older status/audit documents with the current code and evidence, retaining frozen protocols and historical audit dates.
-4. Prioritize the smallest reproducible multi-sequence EuRoC vertical slice, then scale through the frozen sequence registry; do not tune on test sequences.
-5. Freeze TUM-VI sequence identities/checksums and shifted-test rules before inspecting performance.
-6. Build ROS 2, ablations, complete statistical analysis and the final paper only against executable interfaces and observed evidence.
+1. Diagnose ESKF unit/frame, initialization, and propagation errors using a predeclared development-only protocol.
+2. Extend EuRoC execution across the frozen 11-sequence registry after the estimator is stable; preserve all failures.
+3. Review PR #8 against current APIs and close or adapt it based on a concrete code review.
+4. Freeze TUM-VI inventory/checksums and shifted-test rules before evaluating any sequence.
+5. Complete the remaining model comparisons, calibration/uncertainty, degradation, shield benefit, ablations, ROS 2/simulation, manuscript, and release gates.
+6. Record CI on the latest main commit and keep the benchmark status document synchronized.
 
 ## Decision rule
 
